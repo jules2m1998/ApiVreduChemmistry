@@ -27,4 +27,8 @@
         <Folder Include="wwwroot\images\users"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <None Remove="photo_2022-06-23_11-39-19.jpg"/>
+    </ItemGroup>
+
 </Project>

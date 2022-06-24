@@ -33,6 +33,11 @@ public class UserRepository
         return user;
     }
 
+    public User? GetByUserName(string username)
+    {
+        return _context.Users.FirstOrDefault(u => u.UserName == username);
+    }
+
     public User? GetOne(int id)
     {
         return _context.Users.Find(id);
@@ -43,13 +48,16 @@ public class UserRepository
         return _context.Users.ToList();
     }
 
-    public User Update(User user, int userId)
+    public User Update(User user)
     {
         _context.Users.Update(user);
+        _context.SaveChanges();
         return user;
     }
 
-    public void Delete(int id, int usrId)
+    public void Delete(User user)
     {
+        _context.Users.Remove(user);
+        _context.SaveChanges();
     }
 }
