@@ -40,4 +40,10 @@ public class JwtService
 
         return (JwtSecurityToken)validatedToken;
     }
+
+    public int? GetPayload(string jwt)
+    {
+        var token = Verify(jwt);
+        return int.Parse(token.Issuer);
+    }
 }

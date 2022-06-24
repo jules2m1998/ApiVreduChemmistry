@@ -61,7 +61,7 @@ public class AuthController : ControllerBase
                 path,
                 phoneNumber
             );
-            return Ok(user);
+            return Created("Utilisateur cree", user);
         }
         catch (DbUpdateException ex)
         {
@@ -87,6 +87,8 @@ public class AuthController : ControllerBase
     {
         var user = _repository.GetByUserName(dto.Username);
         if (user == null) return BadRequest(new { message = "Nom d'utilisateur ou mot de passe incorrect !" });
+        if (!user.IsActivated)
+            return BadRequest(new { message = "Compte inactif veillez contacter un administrateur!" });
         if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.HashedPassword))
             return BadRequest(new { message = "Nom d'utilisateur ou mot de passe incorrect !" });
 
@@ -125,7 +127,9 @@ public class AuthController : ControllerBase
             var token = _jwtService.Verify(jwt);
             var userId = int.Parse(token.Issuer);
             var user = _repository.GetOne(userId);
-
+            if (user == null) return BadRequest(new { message = "Compte inexistant !" });
+            if (!user.IsActivated)
+                return BadRequest(new { message = "Compte inactif veillez contacter un administrateur!" });
             return Ok(user);
         }
         catch

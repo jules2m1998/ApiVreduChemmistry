@@ -1,3 +1,5 @@
+using ApiVrEdu.Models.Elements;
+
 namespace ApiVrEdu.Models;
 
 public class Reaction : BaseModel

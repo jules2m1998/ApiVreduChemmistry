@@ -37,6 +37,8 @@ builder.Services.AddDbContext<DataContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<UserRepository>();
+builder.Services.AddScoped<TextureRepository>();
+builder.Services.AddScoped<ElementRepository>();
 
 // compression algorithm config
 builder.Services.AddResponseCompression(options =>

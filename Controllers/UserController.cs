@@ -105,7 +105,6 @@ public class UserController : ControllerBase
             if (admin is { IsAdmin: false } || user.IsAdmin)
                 return Unauthorized("Vous ne pouvez pas supprimer cette utilisateur !");
 
-            FileManager.DeleteFile(user.Image ?? "", _env);
             _repository.Delete(user);
             return NoContent();
         }

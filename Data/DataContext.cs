@@ -1,16 +1,26 @@
+using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
+using ApiVrEdu.Models.Elements;
+using ApiVrEdu.Models.Textures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ApiVrEdu.Data;
 
 public class DataContext : DbContext
 {
-    public DataContext(DbContextOptions options) : base(options)
+    private readonly IWebHostEnvironment _env;
+
+    public DataContext(DbContextOptions options, IWebHostEnvironment env) : base(options)
     {
+        _env = env;
     }
 
     public DbSet<User> Users { get; set; }
+    public DbSet<Texture> Textures { get; set; }
+    public DbSet<TextureGroup> TextureGroups { get; set; }
     public DbSet<Element> Elements { get; set; }
+    public DbSet<ElementChildren> ElementChildren { get; set; }
     public DbSet<Reaction> Reactions { get; set; }
     public DbSet<ElementGroup> ElementGroups { get; set; }
     public DbSet<ElementType> ElementTypes { get; set; }
@@ -48,5 +58,16 @@ public class DataContext : DbContext
         modelBuilder.Entity<User>()
             .HasIndex(b => b.PhoneNumber)
             .IsUnique();
+
+        modelBuilder.Entity<TextureGroup>()
+            .HasIndex(b => b.Name)
+            .IsUnique();
+    }
+
+    public override EntityEntry<TEntity> Remove<TEntity>(TEntity entity)
+    {
+        if (entity is not IModelImage et) return base.Remove(entity);
+        FileManager.DeleteFile(et.Image ?? "", _env);
+        return base.Remove(entity);
     }
 }
