@@ -25,6 +25,13 @@ public class DataContext : DbContext
     public DbSet<ElementGroup> ElementGroups { get; set; }
     public DbSet<ElementType> ElementTypes { get; set; }
 
+    public override EntityEntry<TEntity> Remove<TEntity>(TEntity entity)
+    {
+        if (entity is not IModelImage et) return base.Remove(entity);
+        FileManager.DeleteFile(et.Image ?? "", _env);
+        return base.Remove(entity);
+    }
+
     public override int SaveChanges()
     {
         var entries = ChangeTracker
@@ -56,18 +63,15 @@ public class DataContext : DbContext
             .IsUnique();
 
         modelBuilder.Entity<User>()
+            .HasIndex(b => b.UserName)
+            .IsUnique();
+
+        modelBuilder.Entity<User>()
             .HasIndex(b => b.PhoneNumber)
             .IsUnique();
 
         modelBuilder.Entity<TextureGroup>()
             .HasIndex(b => b.Name)
             .IsUnique();
-    }
-
-    public override EntityEntry<TEntity> Remove<TEntity>(TEntity entity)
-    {
-        if (entity is not IModelImage et) return base.Remove(entity);
-        FileManager.DeleteFile(et.Image ?? "", _env);
-        return base.Remove(entity);
     }
 }

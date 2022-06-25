@@ -21,14 +21,12 @@ public class TextureRepository
 
     public Texture Update(Texture texture)
     {
-        _context.Textures.Update(texture);
         _context.SaveChanges();
         return texture;
     }
 
     public void Delete(Texture texture)
     {
-        _context.Remove(texture);
         _context.SaveChanges();
     }
 
@@ -61,7 +59,6 @@ public class TextureRepository
 
     public TextureGroup UpdateGroup(TextureGroup group)
     {
-        _context.TextureGroups.Update(group);
         _context.SaveChanges();
         return group;
     }

@@ -35,7 +35,7 @@ public class UserRepository
 
     public User? GetByUserName(string username)
     {
-        return _context.Users.FirstOrDefault(u => u.UserName == username);
+        return _context.Users.Single(u => u.UserName == username);
     }
 
     public User? GetOne(int id)
@@ -50,14 +50,13 @@ public class UserRepository
 
     public User Update(User user)
     {
-        _context.Users.Update(user);
         _context.SaveChanges();
         return user;
     }
 
     public void Delete(User user)
     {
-        _context.Remove(user);
+        _context.Users.Remove(user);
         _context.SaveChanges();
     }
 }

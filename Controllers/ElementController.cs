@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using ApiVrEdu.Data;
+using System.Text.Json;
+using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models.Elements;
 using ApiVrEdu.Repositories;
@@ -11,7 +12,6 @@ namespace ApiVrEdu.Controllers;
 [Route("api/[controller]")]
 public class ElementController : ControllerBase
 {
-    private readonly DataContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly JwtService _jwtService;
     private readonly ElementRepository _repository;
@@ -19,22 +19,19 @@ public class ElementController : ControllerBase
     private readonly UserRepository _userRepository;
 
     public ElementController(ElementRepository repository, UserRepository userRepository, JwtService jwtService,
-        TextureRepository textureRepository, IWebHostEnvironment env, DataContext context)
+        TextureRepository textureRepository, IWebHostEnvironment env)
     {
         _repository = repository;
         _userRepository = userRepository;
         _jwtService = jwtService;
         _textureRepository = textureRepository;
         _env = env;
-        _context = context;
     }
 
     // Element
     [HttpPost]
     [Route("")]
     public async Task<ActionResult<Element>> Element(
-        [Required(ErrorMessage = "Veillez renseigner s'il s'agit d'un atome ou d'une molecule")] [FromForm]
-        TypeElement typeElement,
         [Required(ErrorMessage = "Nom de l'element obligatoire")] [FromForm]
         string name,
         [Required(ErrorMessage = "Symbole obligatoire")] [FromForm]
@@ -46,7 +43,8 @@ public class ElementController : ControllerBase
         [Required(ErrorMessage = "Groupe obligatoire")] [FromForm]
         int idGroup,
         [Required(ErrorMessage = "Image obligatoire")]
-        IFormFile image
+        IFormFile image,
+        [FromForm] string? elementChildrenStr
     )
     {
         var jwt = Request.Cookies["jwt"];
@@ -69,7 +67,6 @@ public class ElementController : ControllerBase
             path = await FileManager.CreateFile(image, user.UserName, _env, new[] { "elements" });
             var element = new Element
             {
-                TypeElement = typeElement,
                 Name = name,
                 Symbol = symbol,
                 Image = path,
@@ -79,7 +76,41 @@ public class ElementController : ControllerBase
                 Texture = texture
             };
 
-            return Created("", _repository.Element(element));
+            if (elementChildrenStr == null) return Created("", _repository.Element(element));
+
+            try
+            {
+                var elt = _repository.Element(element);
+                var jsonStr = elementChildrenStr
+                        .Replace("id", "Id")
+                        .Replace("quantity", "Quantity")
+                        .Replace("position", "Position")
+                    ;
+                var deserialize = JsonSerializer.Deserialize<List<ElementChildrenDto>>(jsonStr);
+                if (deserialize is null) return BadRequest("Aucun atome transmit pour cette molecule 1");
+                var ids = deserialize.Select(ec => ec.Id).ToList();
+                var atoms = _repository.Element(ids);
+
+                if (ids.Count != atoms.Count) return BadRequest("Certains elements transmit n'existent pas !");
+                var ecs = deserialize.Select((ec, id) => new ElementChildren
+                {
+                    Children = atoms[id],
+                    Position = ec.Position,
+                    Quantity = ec.Quantity,
+                    Parent = elt
+                }).ToList();
+
+                _repository.Children(ecs);
+
+                element = _repository.Element(elt.Id);
+
+                return Created("", element);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                return BadRequest("Le format des atomes pour la molecule n'est pas le bon");
+            }
         }
         catch (Exception e)
         {
@@ -92,14 +123,13 @@ public class ElementController : ControllerBase
     public async Task<ActionResult<Element>> Element(
         [Required(ErrorMessage = "Identification obligatoire")]
         int id,
-        TypeElement? typeElement,
         string? name,
         string? symbol,
         int? idTexture,
         int? idType,
         int? idGroup,
         IFormFile? image
-        )
+    )
     {
         var jwt = Request.Cookies["jwt"];
         if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
@@ -112,10 +142,6 @@ public class ElementController : ControllerBase
         if (element == null) return BadRequest("Element inexistant !");
         if (element.User.Id != user.Id) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
 
-        if (typeElement != null)
-        {
-            element.TypeElement = (TypeElement)typeElement;
-        }
 
         if (name != null)
         {
@@ -124,7 +150,7 @@ public class ElementController : ControllerBase
 
         if (symbol != null)
         {
-            element.Name = symbol;
+            element.Symbol = symbol;
         }
 
         if (idTexture != null)
@@ -164,7 +190,19 @@ public class ElementController : ControllerBase
         }
 
         return Ok(_repository.UpdateElement(element));
+    }
 
+    [HttpGet]
+    public ActionResult<List<Element>> Element()
+    {
+        var jwt = Request.Cookies["jwt"];
+        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = _jwtService.GetPayload(jwt ?? "");
+        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var user = _userRepository.GetOne((int)userId);
+        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        return Ok(_repository.Element());
     }
 
     // Group

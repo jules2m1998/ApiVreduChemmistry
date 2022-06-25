@@ -73,6 +73,8 @@ public class AuthController : ControllerBase
                 return BadRequest("Cette addresse existe deja veillez utuliser une nouvelle !");
             if (constraintName != null && constraintName.ToLower().Contains("phone"))
                 return BadRequest("Ce numero de telephone est deja utilise veillez utiliser un nouveau !");
+            if (constraintName != null && constraintName.ToLower().Contains("username"))
+                return BadRequest("Ce Nom d'utilisateur est deja utilise veillez utiliser un nouveau !");
             return BadRequest("Champs mal renseigne veilllez verifier vos informations !");
         }
         catch (Exception ex)

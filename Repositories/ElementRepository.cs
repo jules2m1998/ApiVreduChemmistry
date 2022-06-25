@@ -15,7 +15,7 @@ public class ElementRepository
     // Element type
     public ElementType Type(ElementType elementType)
     {
-        _context.Add(elementType);
+        _context.ElementTypes.Add(elementType);
         _context.SaveChanges();
 
         return elementType;
@@ -40,14 +40,14 @@ public class ElementRepository
 
     public void DeleteType(ElementType elementType)
     {
-        _context.Remove(elementType);
+        _context.ElementTypes.Remove(elementType);
         _context.SaveChanges();
     }
 
     // Element Group
     public ElementGroup Group(ElementGroup group)
     {
-        _context.Add(group);
+        _context.ElementGroups.Add(group);
         _context.SaveChanges();
         return group;
     }
@@ -64,7 +64,6 @@ public class ElementRepository
 
     public ElementGroup UpdateGroup(ElementGroup group)
     {
-        _context.Update(group);
         _context.SaveChanges();
 
         return group;
@@ -72,14 +71,14 @@ public class ElementRepository
 
     public void DeleteGroup(ElementGroup group)
     {
-        _context.Remove(group);
+        _context.ElementGroups.Remove(group);
         _context.SaveChanges();
     }
 
     // Element
     public Element Element(Element element)
     {
-        _context.Add(element);
+        _context.Elements.Add(element);
         _context.SaveChanges();
         return element;
     }
@@ -94,17 +93,29 @@ public class ElementRepository
         return _context.Elements.Find(id);
     }
 
+    public List<Element> Element(List<int> ids)
+    {
+        return _context.Elements.Where(e => ids.Contains(e.Id)).ToList();
+    }
+
     public Element UpdateElement(Element element)
     {
-        _context.Update(element);
+        _context.Elements.Update(element);
         _context.SaveChanges();
         return element;
     }
 
     public Element DeleteElement(Element element)
     {
-        _context.Remove(element);
+        _context.Elements.Remove(element);
         _context.SaveChanges();
         return element;
+    }
+
+    public List<ElementChildren> Children(List<ElementChildren> childrenList)
+    {
+        childrenList.ForEach(c => _context.ElementChildren.Add(c));
+        _context.SaveChanges();
+        return childrenList;
     }
 }
