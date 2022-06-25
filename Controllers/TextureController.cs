@@ -147,7 +147,7 @@ public class TextureController : ControllerBase
         return Ok(_repository.GetAllGroups());
     }
 
-    [HttpGet]
+    [HttpGet("{id:int}")]
     public ActionResult<TextureGroup> OneTextureGroup([Required(ErrorMessage = "Identifiant obligatoire")] int id)
     {
         var jwt = Request.Cookies["jwt"];
@@ -269,7 +269,7 @@ public class TextureController : ControllerBase
         return NoContent();
     }
 
-    [HttpGet]
+    [HttpGet("{id:int}")]
     public ActionResult<Texture> OneTexture(
         [Required(ErrorMessage = "Identifiant obligatoire")]
         int id

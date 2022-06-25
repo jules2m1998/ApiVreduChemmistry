@@ -1,5 +1,6 @@
 using ApiVrEdu.Data;
 using ApiVrEdu.Models.Elements;
+using Microsoft.EntityFrameworkCore;
 
 namespace ApiVrEdu.Repositories;
 
@@ -85,7 +86,7 @@ public class ElementRepository
 
     public List<Element> Element()
     {
-        return _context.Elements.ToList();
+        return _context.Elements.AsNoTracking().Include(element => element.User).ToList();
     }
 
     public Element? Element(int id)

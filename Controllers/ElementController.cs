@@ -205,6 +205,23 @@ public class ElementController : ControllerBase
         return Ok(_repository.Element());
     }
 
+    [HttpGet]
+    [Route("{id:int}")]
+    public ActionResult<Element> Element(
+        [Required(ErrorMessage = "Identification obligatoire")]
+        int id
+        )
+    {
+        var jwt = Request.Cookies["jwt"];
+        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = _jwtService.GetPayload(jwt ?? "");
+        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var user = _userRepository.GetOne((int)userId);
+        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        return Ok(_repository.Element(id));
+    }
+
     // Group
     [HttpPost]
     [Route("Group")]
@@ -254,7 +271,7 @@ public class ElementController : ControllerBase
     }
 
     [HttpGet]
-    [Route("oneGroup")]
+    [Route("Group/{id:int}")]
     public ActionResult<ElementGroup> OneGroup([Required(ErrorMessage = "Identifiant obligatoire")] int id)
     {
         var group = _repository.Group(id);
@@ -448,7 +465,7 @@ public class ElementController : ControllerBase
     }
 
     [HttpGet]
-    [Route("Type")]
+    [Route("Type/{id:int}")]
     public ActionResult<ElementType?> OneType(
         [Required(ErrorMessage = "Identifiant obligatoire")]
         int id
@@ -460,8 +477,8 @@ public class ElementController : ControllerBase
     }
 
     [HttpGet]
-    [Route("OneType")]
-    public ActionResult<ElementType> OneType()
+    [Route("Type")]
+    public ActionResult<List<ElementType>> Type()
     {
         return Ok(_repository.Type());
     }
