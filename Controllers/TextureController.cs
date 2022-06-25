@@ -268,4 +268,38 @@ public class TextureController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpGet]
+    public ActionResult<Texture> OneTexture(
+        [Required(ErrorMessage = "Identifiant obligatoire")]
+        int id
+    )
+    {
+        var jwt = Request.Cookies["jwt"];
+        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = _jwtService.GetPayload(jwt ?? "");
+        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var user = _userRepository.GetOne((int)userId);
+        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        var texture = _repository.Get(id);
+        if (texture == null) return BadRequest("Texture inexistante");
+        if (texture.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        return Ok(texture);
+    }
+    
+    [HttpGet]
+    public ActionResult<List<Texture>> Texture()
+    {
+        var jwt = Request.Cookies["jwt"];
+        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = _jwtService.GetPayload(jwt ?? "");
+        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var user = _userRepository.GetOne((int)userId);
+        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        return Ok(_repository.Get());
+    }
+    
 }

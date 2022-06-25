@@ -88,6 +88,85 @@ public class ElementController : ControllerBase
         }
     }
 
+    [HttpPut]
+    public async Task<ActionResult<Element>> Element(
+        [Required(ErrorMessage = "Identification obligatoire")]
+        int id,
+        TypeElement? typeElement,
+        string? name,
+        string? symbol,
+        int? idTexture,
+        int? idType,
+        int? idGroup,
+        IFormFile? image
+        )
+    {
+        var jwt = Request.Cookies["jwt"];
+        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = _jwtService.GetPayload(jwt ?? "");
+        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var user = _userRepository.GetOne((int)userId);
+        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        var element = _repository.Element(id);
+        if (element == null) return BadRequest("Element inexistant !");
+        if (element.User.Id != user.Id) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+
+        if (typeElement != null)
+        {
+            element.TypeElement = (TypeElement)typeElement;
+        }
+
+        if (name != null)
+        {
+            element.Name = name;
+        }
+
+        if (symbol != null)
+        {
+            element.Name = symbol;
+        }
+
+        if (idTexture != null)
+        {
+            var texture = _textureRepository.Get(id);
+            if (texture == null) return BadRequest("Texture inexistant !");
+            element.Texture = texture;
+        }
+
+        if (idType != null)
+        {
+            var type = _repository.Type(id);
+            if (type == null) return BadRequest("Type d'elemeent inexistant !");
+            element.Type = type;
+        }
+
+        if (idGroup != null)
+        {
+            var group = _repository.Group(id);
+            if (group == null) return BadRequest("Group d'element inexistant !");
+            element.Group = group;
+        }
+
+        if (image != null)
+        {
+            string? path = null;
+            try
+            {
+                path = await FileManager.CreateFile(image, user.UserName, _env, new[] { "elements" });
+                element.Image = path;
+            }
+            catch (Exception e)
+            {
+                FileManager.DeleteFile(path ?? "", _env);
+                return BadRequest(e.Message);
+            }
+        }
+
+        return Ok(_repository.UpdateElement(element));
+
+    }
+
     // Group
     [HttpPost]
     [Route("Group")]
