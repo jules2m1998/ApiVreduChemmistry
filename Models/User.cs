@@ -14,7 +14,6 @@ public enum SexType
 
 public class User : IdentityUser<int>, IModelImage
 {
-
     public DateTime CreatedDate { get; set; }
 
     public DateTime UpdatedDate { get; set; }
@@ -27,6 +26,8 @@ public class User : IdentityUser<int>, IModelImage
     public DateTime BirthDate { get; set; }
 
     public SexType Sex { get; set; }
+
+    [JsonIgnore] public override string PasswordHash { get; set; }
 
     public bool IsAdmin { get; set; } = false;
 

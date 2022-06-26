@@ -3,14 +3,13 @@ using ApiVrEdu.Models;
 using ApiVrEdu.Models.Elements;
 using ApiVrEdu.Models.Reactions;
 using ApiVrEdu.Models.Textures;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ApiVrEdu.Data;
 
-public class DataContext : IdentityDbContext<User, IdentityRole<int>, int>
+public class DataContext : IdentityDbContext<User, Role, int>
 {
     private readonly IWebHostEnvironment _env;
 

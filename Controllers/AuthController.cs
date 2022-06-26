@@ -5,30 +5,27 @@ using System.Text;
 using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
-using ApiVrEdu.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ApiVrEdu.Controllers;
 
-[Route("api/[controller]/[action]")]
+[Route("api/[controller]")]
 [ApiController]
+[AllowAnonymous]
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _env;
-    private readonly JwtService _jwtService;
-    private readonly UserRepository _repository;
-    private readonly RoleManager<IdentityRole<int>> _roleManager;
+    private readonly RoleManager<Role> _roleManager;
     private readonly UserManager<User> _userManager;
 
-    public AuthController(UserRepository repository, IWebHostEnvironment env, JwtService jwtService,
-        UserManager<User> userManager, IConfiguration configuration, RoleManager<IdentityRole<int>> roleManager)
+    public AuthController(IWebHostEnvironment env, UserManager<User> userManager, IConfiguration configuration,
+        RoleManager<Role> roleManager)
     {
-        _repository = repository;
         _env = env;
-        _jwtService = jwtService;
         _userManager = userManager;
         _configuration = configuration;
         _roleManager = roleManager;
@@ -39,12 +36,21 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromForm] LoginDto model)
     {
         var user = await _userManager.FindByNameAsync(model.Username.ToLower());
-        if (user == null || !await _userManager.CheckPasswordAsync(user, model.Password.ToLower())) return Unauthorized();
+        if (user == null || !await _userManager.CheckPasswordAsync(user, model.Password.ToLower()))
+            return Unauthorized();
+        if (!user.IsActivated)
+            return Unauthorized(new Response
+            {
+                Status = "Error",
+                Message =
+                    "Votre compte est desactive veillez demander consulter un administrateur afin qu'il l'active !"
+            });
         var userRoles = await _userManager.GetRolesAsync(user);
 
         var authClaims = new List<Claim>
         {
             new(ClaimTypes.Name, user.UserName),
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -114,7 +120,7 @@ public class AuthController : ControllerBase
         user.Image = path;
         var result = await _userManager.CreateAsync(user, password.ToLower());
         if (result.Succeeded) return Ok(new Response { Status = "Success", Message = "User created successfully!" });
-        FileManager.DeleteFile(path??"", _env);
+        FileManager.DeleteFile(path ?? "", _env);
         return StatusCode(StatusCodes.Status500InternalServerError,
             new Response
                 { Status = "Error", Message = "User creation failed! Please check user details and try again." });
@@ -179,14 +185,18 @@ public class AuthController : ControllerBase
                     { Status = "Error", Message = "User creation failed! Please check user details and try again." });
 
         if (!await _roleManager.RoleExistsAsync(UserRole.Admin))
-            await _roleManager.CreateAsync(new IdentityRole<int>(UserRole.Admin));
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.Admin
+            });
         if (!await _roleManager.RoleExistsAsync(UserRole.User))
-            await _roleManager.CreateAsync(new IdentityRole<int>(UserRole.User));
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.User
+            });
 
         if (await _roleManager.RoleExistsAsync(UserRole.Admin))
             await _userManager.AddToRoleAsync(user, UserRole.Admin);
-        if (await _roleManager.RoleExistsAsync(UserRole.Admin))
-            await _userManager.AddToRoleAsync(user, UserRole.User);
         return Ok(new Response { Status = "Success", Message = "User created successfully!" });
     }
 

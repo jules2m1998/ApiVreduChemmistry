@@ -1,148 +1,141 @@
-using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
-using ApiVrEdu.Repositories;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiVrEdu.Controllers;
 
 [ApiController]
-[Route("api/[controller]/[action]")]
+[Route("api/[controller]")]
+[Authorize]
 public class UserController : ControllerBase
 {
     private readonly IWebHostEnvironment _env;
-    private readonly JwtService _jwtService;
-    private readonly UserRepository _repository;
+    private readonly UserManager<User> _userManager;
 
-    public UserController(UserRepository repository, IWebHostEnvironment env, JwtService jwtService)
+    public UserController(IWebHostEnvironment env, UserManager<User> userManager)
     {
-        _repository = repository;
         _env = env;
-        _jwtService = jwtService;
+        _userManager = userManager;
     }
 
     [HttpPut]
-    public async Task<ActionResult<User>> Update(
-        [Required(ErrorMessage = "Identifiant obligatoire")] [FromForm]
-        int id,
-        [FromForm] string? username,
-        [FromForm] string? password,
-        [FromForm] string? lastname,
-        [FromForm] string? firstname,
-        [FromForm] [EmailAddress(ErrorMessage = "L'adresse email n'est pas valid")]
-        string? email,
-        [FromForm] [Phone(ErrorMessage = "Le numero de telephone n'est pas valid")]
-        string? phoneNumber,
-        IFormFile? image,
-        [FromForm] DateTime? birthDate,
-        [FromForm] SexType? sex
-    )
+    public async Task<ActionResult<User>> UserUpdate([FromForm] UserUpdateDto dto)
     {
-        string?[] props = { username, password, lastname, firstname, email, phoneNumber };
-        var allStringNull = props.All(s => s == null);
-        if (allStringNull && image == null && birthDate == null && sex == null)
-            return BadRequest("Aucune information transmise !");
-        string? path = null;
-        try
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return NotFound(new Response
+            {
+                Message = "Utilisateur inexistant !",
+                Status = "Error"
+            });
+
+        foreach (var prop in dto.GetType().GetProperties())
         {
-            var user = _repository.GetOne(id);
-            var jwt = Request.Cookies["jwt"];
-            var token = _jwtService.Verify(jwt);
-            var userId = int.Parse(token.Issuer);
+            if (prop.Name.ToLower() is ("id" or "image" or "OldPassword" or "NewPassword")) continue;
+            var val = prop.GetValue(dto, null);
+            if (val is null) continue;
+            var type = user.GetType();
+            var pr = type.GetProperty(prop.Name);
+            pr?.SetValue(user, val);
 
-            if (user == null) return BadRequest("Utilisateur inexistant");
-            if (user.Id != userId)
+            if (dto.GetType().GetProperties().Length > 1 && dto.GetType().GetProperties().Last().Equals(prop))
+                user.UpdatedDate = DateTime.UtcNow;
+        }
+
+        if (dto.OldPassword is not null && dto.NewPassword is not null)
+        {
+            var rP = await _userManager.ChangePasswordAsync(user, dto.OldPassword, dto.NewPassword);
+            if (!rP.Succeeded)
+                return BadRequest(new Response
+                {
+                    Message = "Ancien mot de passe incorrect !",
+                    Status = "Error"
+                });
+        }
+
+        if (dto.Image is not null)
+            try
             {
-                var admin = _repository.GetOne(userId);
-                if (admin is null or { IsAdmin: false })
-                    return Unauthorized("Vous ne pouvez pas modiffier ce compte !");
-            }
-
-            if (username != null) user.UserName = username;
-
-            if (password != null) user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
-
-            if (lastname != null) user.LastName = lastname;
-
-            if (firstname != null) user.FirstName = firstname;
-
-            if (email != null) user.Email = email;
-
-            if (phoneNumber != null) user.PhoneNumber = phoneNumber;
-
-            if (image != null)
-            {
+                var path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "users" });
                 FileManager.DeleteFile(user.Image ?? "", _env);
-                path = await FileManager.CreateFile(image, user.UserName, _env, new[] { "users" });
                 user.Image = path;
             }
+            catch (Exception e)
+            {
+                return BadRequest(new Response { Status = "Error", Message = e.Message });
+            }
 
-            if (birthDate != null) user.BirthDate = (DateTime)birthDate;
-
-            if (sex != null) user.Sex = (SexType)sex;
-
-            return Ok(_repository.Update(user));
-        }
-        catch (Exception e)
-        {
-            FileManager.DeleteFile(path ?? "", _env);
-            return Unauthorized(e.Message);
-        }
-    }
-
-    [HttpDelete]
-    public ActionResult Delete(int id)
-    {
-        try
-        {
-            var user = _repository.GetOne(id);
-            var jwt = Request.Cookies["jwt"];
-            var token = _jwtService.Verify(jwt);
-            var userId = int.Parse(token.Issuer);
-            var admin = _repository.GetOne(userId);
-
-            if (user == null) return BadRequest("Utilisateur introuvable !");
-            if (admin is { IsAdmin: false } || user.IsAdmin)
-                return Unauthorized("Vous ne pouvez pas supprimer cette utilisateur !");
-
-            _repository.Delete(user);
-            return NoContent();
-        }
-        catch
-        {
-            return Unauthorized();
-        }
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return StatusCode(StatusCodes.Status500InternalServerError, new Response
+            {
+                Status = "Error",
+                Message = "Veillez verifier vos informations et reessayer plus tard !"
+            });
+        return Ok(user);
     }
 
     [HttpPut]
-    public ActionResult<User> Activate([Required(ErrorMessage = "Identifiant obligatoire !")] int id)
+    [Route("Admin")]
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<User>> UserUpdateAdmin([FromForm] UpdateUserAdminDto dto)
     {
-        var user = _repository.GetOne(id);
-        if (user == null) return BadRequest("Utilisateur introuvable");
-        if (user.IsActivated) return BadRequest("Utilisateur actif");
-        var jwt = Request.Cookies["jwt"];
-        var token = _jwtService.Verify(jwt);
-        var userId = int.Parse(token.Issuer);
-        var admin = _repository.GetOne(userId);
-        if (admin is { IsAdmin: false } || user.IsAdmin) return Unauthorized("Vous ne pouvez pas activer ce compte !");
+        var user = await _userManager.FindByIdAsync(dto.Id.ToString());
+        if (user is null)
+            return NotFound(new Response
+            {
+                Message = "Utilisateur inexistant !",
+                Status = "Error"
+            });
 
-        user.IsActivated = true;
-        return Ok(_repository.Update(user));
-    }
+        foreach (var prop in dto.GetType().GetProperties())
+        {
+            if (prop.Name.ToLower() is ("id" or "image" or "OldPassword" or "NewPassword")) continue;
+            var val = prop.GetValue(dto, null);
+            if (val is null) continue;
+            var type = user.GetType();
+            var pr = type.GetProperty(prop.Name);
+            pr?.SetValue(user, val);
 
-    [HttpPut]
-    public ActionResult<User> Deactivate([Required(ErrorMessage = "Identifiant obligatoire !")] int id)
-    {
-        var user = _repository.GetOne(id);
-        if (user == null) return BadRequest("Utilisateur introuvable");
-        if (!user.IsActivated) return BadRequest("Utilisateur inactif");
-        var jwt = Request.Cookies["jwt"];
-        var token = _jwtService.Verify(jwt);
-        var userId = int.Parse(token.Issuer);
-        var admin = _repository.GetOne(userId);
-        if (admin is { IsAdmin: false } || user.IsAdmin) return Unauthorized("Vous ne pouvez pas activer ce compte !");
+            if (dto.GetType().GetProperties().Length > 1 && dto.GetType().GetProperties().Last().Equals(prop))
+                user.UpdatedDate = DateTime.UtcNow;
+        }
 
-        user.IsActivated = false;
-        return Ok(_repository.Update(user));
+        if (dto.OldPassword is not null && dto.NewPassword is not null)
+        {
+            var rP = await _userManager.ChangePasswordAsync(user, dto.OldPassword, dto.NewPassword);
+            if (!rP.Succeeded)
+                return BadRequest(new Response
+                {
+                    Message = "Ancien mot de passe incorrect !",
+                    Status = "Error"
+                });
+        }
+
+        if (dto.Image is not null)
+            try
+            {
+                var path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "users" });
+                FileManager.DeleteFile(user.Image ?? "", _env);
+                user.Image = path;
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new Response { Status = "Error", Message = e.Message });
+            }
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+            return StatusCode(StatusCodes.Status500InternalServerError, new Response
+            {
+                Status = "Error",
+                Message = "Veillez verifier vos informations et reessayer plus tard !"
+            });
+        return Ok(user);
     }
 }
