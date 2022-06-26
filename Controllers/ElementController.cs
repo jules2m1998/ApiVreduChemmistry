@@ -4,12 +4,14 @@ using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models.Elements;
 using ApiVrEdu.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiVrEdu.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class ElementController : ControllerBase
 {
     private readonly IWebHostEnvironment _env;
@@ -143,15 +145,9 @@ public class ElementController : ControllerBase
         if (element.User.Id != user.Id) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
 
 
-        if (name != null)
-        {
-            element.Name = name;
-        }
+        if (name != null) element.Name = name;
 
-        if (symbol != null)
-        {
-            element.Symbol = symbol;
-        }
+        if (symbol != null) element.Symbol = symbol;
 
         if (idTexture != null)
         {
@@ -210,7 +206,7 @@ public class ElementController : ControllerBase
     public ActionResult<Element> Element(
         [Required(ErrorMessage = "Identification obligatoire")]
         int id
-        )
+    )
     {
         var jwt = Request.Cookies["jwt"];
         if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");

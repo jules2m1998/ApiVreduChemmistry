@@ -1,3 +1,4 @@
+using System.Data.Entity;
 using ApiVrEdu.Data;
 using ApiVrEdu.Models;
 
@@ -18,7 +19,7 @@ public class UserRepository
         var user = new User
         {
             UserName = username,
-            HashedPassword = hashedPwd,
+            PasswordHash = hashedPwd,
             LastName = lastname,
             FirstName = firstname,
             Email = email,
@@ -35,12 +36,12 @@ public class UserRepository
 
     public User? GetByUserName(string username)
     {
-        return _context.Users.Single(u => u.UserName == username);
+        return _context.Users.Include(user => user.Reactions).Single(u => u.UserName == username);
     }
 
     public User? GetOne(int id)
     {
-        return _context.Users.Find(id);
+        return _context.Users.Include(user => user.Reactions).Single(user => user.Id == id);
     }
 
     public IEnumerable<User> GetAll()

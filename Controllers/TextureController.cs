@@ -288,7 +288,7 @@ public class TextureController : ControllerBase
 
         return Ok(texture);
     }
-    
+
     [HttpGet]
     public ActionResult<List<Texture>> Texture()
     {
@@ -301,5 +301,4 @@ public class TextureController : ControllerBase
 
         return Ok(_repository.Get());
     }
-    
 }

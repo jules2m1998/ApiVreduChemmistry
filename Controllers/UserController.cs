@@ -60,7 +60,7 @@ public class UserController : ControllerBase
 
             if (username != null) user.UserName = username;
 
-            if (password != null) user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(password);
+            if (password != null) user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
 
             if (lastname != null) user.LastName = lastname;
 

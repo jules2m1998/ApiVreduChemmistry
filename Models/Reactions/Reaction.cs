@@ -1,6 +1,4 @@
-using ApiVrEdu.Models.Elements;
-
-namespace ApiVrEdu.Models;
+namespace ApiVrEdu.Models.Reactions;
 
 public class Reaction : BaseModel
 {
@@ -9,6 +7,6 @@ public class Reaction : BaseModel
 
     public User User { get; set; } = new();
 
-    public List<Element> Products { get; set; } = new();
-    public List<Element> Reactants { get; set; } = new();
+    public virtual List<Product> Products { get; set; } = new();
+    public virtual List<Reactant> Reactants { get; set; } = new();
 }
