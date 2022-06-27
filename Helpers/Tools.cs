@@ -9,7 +9,7 @@ public static class Tools
         {
             if (except.Contains(prop.Name.ToLower())) continue;
             var val = prop.GetValue(dto, null);
-            if (val is null) continue;
+            if (val is null or "") continue;
             var type = entity?.GetType();
             var pr = type?.GetProperty(prop.Name);
             pr?.SetValue(entity, val);
