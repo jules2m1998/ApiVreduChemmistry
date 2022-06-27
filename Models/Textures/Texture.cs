@@ -6,9 +6,7 @@ public class Texture : BaseModel, IModelImage
 {
     public List<Element> Elements = new();
     public string Name { get; set; } = string.Empty;
-    public string Color { get; set; } = string.Empty;
-
-    public TextureGroup Group { get; set; } = new();
-    public User User { get; set; } = new();
+    public TextureGroup Group { get; set; }
+    public User User { get; set; }
     public string Image { get; set; } = string.Empty;
 }

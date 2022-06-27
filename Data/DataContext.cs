@@ -51,9 +51,25 @@ public class DataContext : IdentityDbContext<User, Role, int>
         return base.SaveChanges();
     }
 
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = new())
+    {
+        var entries = ChangeTracker
+            .Entries()
+            .Where(e => e.Entity is BaseModel && e.State is EntityState.Added or EntityState.Modified);
+
+        foreach (var entityEntry in entries)
+        {
+            ((BaseModel)entityEntry.Entity).UpdatedDate = DateTime.UtcNow;
+
+            if (entityEntry.State == EntityState.Added) ((BaseModel)entityEntry.Entity).CreatedDate = DateTime.UtcNow;
+        }
+
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-
         modelBuilder.Entity<User>()
             .Property(b => b.IsActivated)
             .HasDefaultValueSql("false");

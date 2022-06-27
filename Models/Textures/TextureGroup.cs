@@ -6,5 +6,5 @@ public class TextureGroup : BaseModel
 {
     public string Name { get; set; } = string.Empty;
     [InverseProperty("Group")] public ICollection<Texture> Textures { get; set; } = new List<Texture>();
-    public User User { get; set; } = new();
+    public User User { get; set; }
 }
