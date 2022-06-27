@@ -30,7 +30,7 @@ public class User : IdentityUser<int>, IModelImage
     [JsonIgnore] public override string PasswordHash { get; set; } = string.Empty;
 
 
-    public virtual List<ElementGroup> ElementGroups { get; set; } = new();
+    public List<ElementGroup> ElementGroups { get; set; } = new();
     public virtual List<Element> Elements { get; set; } = new();
     public virtual List<ElementType> ElementTypes { get; set; } = new();
     public virtual List<TextureGroup> TextureGroups { get; set; } = new();

@@ -4,6 +4,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Runtime.Serialization;
 using System.Security.Claims;
 using System.Text;
+using ApiVrEdu.Data;
 using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
@@ -24,14 +25,16 @@ public class AuthController : ControllerBase
     private readonly IWebHostEnvironment _env;
     private readonly RoleManager<Role> _roleManager;
     private readonly UserManager<User> _userManager;
+    private readonly DataContext _context;
 
     public AuthController(IWebHostEnvironment env, UserManager<User> userManager, IConfiguration configuration,
-        RoleManager<Role> roleManager)
+        RoleManager<Role> roleManager, DataContext context)
     {
         _env = env;
         _userManager = userManager;
         _configuration = configuration;
         _roleManager = roleManager;
+        _context = context;
     }
 
     [HttpPost]
@@ -226,7 +229,7 @@ public class AuthController : ControllerBase
                 Message = "Token invalide !",
                 Status = "Error"
             });
-        var user = await _userManager.FindByIdAsync(userId);
+        var user = await _context.Users.FirstOrDefaultAsync(user1 => user1.Id == int.Parse(userId));
 
         return user switch
         {
@@ -255,7 +258,7 @@ public class AuthController : ControllerBase
         return token;
     }
 
-    public async Task<User> CreateUser(User user, string password)
+    private async Task<User> CreateUser(User user, string password)
     {
         try
         {
