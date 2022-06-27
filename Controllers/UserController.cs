@@ -138,4 +138,11 @@ public class UserController : ControllerBase
             });
         return Ok(user);
     }
+
+    [HttpGet, Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<List<User>>> All()
+    {
+        var users = await _userManager.GetUsersInRoleAsync(UserRole.User);
+        return Ok(users);
+    }
 }

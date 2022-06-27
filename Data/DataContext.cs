@@ -53,9 +53,6 @@ public class DataContext : IdentityDbContext<User, Role, int>
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<User>()
-            .Property(b => b.IsAdmin)
-            .HasDefaultValueSql("false");
 
         modelBuilder.Entity<User>()
             .Property(b => b.IsActivated)

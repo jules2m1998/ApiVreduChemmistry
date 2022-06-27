@@ -27,9 +27,8 @@ public class User : IdentityUser<int>, IModelImage
 
     public SexType Sex { get; set; }
 
-    [JsonIgnore] public override string PasswordHash { get; set; }
+    [JsonIgnore] public override string PasswordHash { get; set; } = string.Empty;
 
-    public bool IsAdmin { get; set; } = false;
 
     public virtual List<ElementGroup> ElementGroups { get; set; } = new();
     public virtual List<Element> Elements { get; set; } = new();

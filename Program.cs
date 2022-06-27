@@ -89,6 +89,11 @@ builder.Services.Configure<IdentityOptions>(options =>
     options.User.RequireUniqueEmail = true;
 });
 
+// builder.Services.Configure<UserOptions>(options =>
+// {
+//     options.RequireUniqueEmail = true;
+// });
+
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

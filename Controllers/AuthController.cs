@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Data.SqlClient;
 using System.IdentityModel.Tokens.Jwt;
+using System.Runtime.Serialization;
 using System.Security.Claims;
 using System.Text;
 using ApiVrEdu.Dto;
@@ -8,13 +10,14 @@ using ApiVrEdu.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 
 namespace ApiVrEdu.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[AllowAnonymous]
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
@@ -88,11 +91,6 @@ public class AuthController : ControllerBase
         SexType sex
     )
     {
-        var userExists = await _userManager.FindByNameAsync(username.ToLower());
-        if (userExists != null)
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new Response { Status = "Error", Message = "User already exists!" });
-
         User user = new()
         {
             Email = email.ToLower(),
@@ -118,12 +116,29 @@ public class AuthController : ControllerBase
         }
 
         user.Image = path;
-        var result = await _userManager.CreateAsync(user, password.ToLower());
-        if (result.Succeeded) return Ok(new Response { Status = "Success", Message = "User created successfully!" });
-        FileManager.DeleteFile(path ?? "", _env);
-        return StatusCode(StatusCodes.Status500InternalServerError,
-            new Response
-                { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+
+        try
+        {
+            await CreateUser(user, password);
+        }
+        catch (AuthException e)
+        {
+            FileManager.DeleteFile(path ?? "", _env);
+            return StatusCode(e.StatusCode, new Response
+            {
+                Errors = e.Errors,
+                Status = "Error"
+            });
+        }
+
+        if (!await _roleManager.RoleExistsAsync(UserRole.User))
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.User
+            });
+        if (await _roleManager.RoleExistsAsync(UserRole.User))
+            await _userManager.AddToRoleAsync(user, UserRole.User);
+        return Ok(new Response { Status = "Succes", Message = "Utilisateur cree avec succes !" });
     }
 
     [HttpPost]
@@ -164,7 +179,8 @@ public class AuthController : ControllerBase
             Sex = sex,
             PhoneNumber = phoneNumber,
             CreatedDate = DateTime.UtcNow,
-            UpdatedDate = DateTime.UtcNow
+            UpdatedDate = DateTime.UtcNow,
+            IsActivated = true
         };
         string? path = null;
 
@@ -178,7 +194,7 @@ public class AuthController : ControllerBase
         }
 
         user.Image = path;
-        var result = await _userManager.CreateAsync(user, password.ToLower());
+        var result = await _userManager.CreateAsync(user, password);
         if (!result.Succeeded)
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new Response
@@ -200,6 +216,29 @@ public class AuthController : ControllerBase
         return Ok(new Response { Status = "Success", Message = "User created successfully!" });
     }
 
+    [HttpGet, Authorize, Route("user")]
+    public async Task<ActionResult<User>> Current()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return BadRequest(new Response
+            {
+                Message = "Token invalide !",
+                Status = "Error"
+            });
+        var user = await _userManager.FindByIdAsync(userId);
+
+        return user switch
+        {
+            null => NotFound(new Response { Message = "Utilisateur inexistant !", Status = "Error" }),
+            { IsActivated: false } => Unauthorized(new Response
+            {
+                Message = "Compte innactif veillez contacter un administrateur !", Status = "Error"
+            }),
+            _ => user
+        };
+    }
+
 
     private JwtSecurityToken GetToken(IEnumerable<Claim> authClaims)
     {
@@ -214,5 +253,60 @@ public class AuthController : ControllerBase
         );
 
         return token;
+    }
+
+    public async Task<User> CreateUser(User user, string password)
+    {
+        try
+        {
+            var result = await _userManager.CreateAsync(user, password);
+            if (result.Succeeded) return user;
+            var errors = new Dictionary<string, string>();
+            foreach (var identityError in result.Errors)
+            {
+                switch (identityError.Code)
+                {
+                    case "DuplicateUserName":
+                        errors.Add("username", "Cette utilisateur existe deja cree en un nouveau ou connectez vous !");
+                        break;
+                    case "DuplicateEmail":
+                        errors.Add("email", "Cette adresse email est deja associe a un autre compte !");
+                        break;
+                }
+            }
+
+            throw new AuthException(StatusCodes.Status400BadRequest, errors);
+        }
+        catch (DbUpdateException ex)
+        {
+            if (ex.InnerException is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } npgex)
+                throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+                {
+                    {"0", ex.Message}
+                });
+            var constraintName = npgex.ConstraintName;
+            if (constraintName != null && constraintName.ToLower().Contains("phone"))
+                throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+                {
+                    { "phoneNumber", "Ce numero de telephone est deja associe a un autre compte !" }
+                });
+            
+            throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+            {
+                {"0", ex.Message}
+            });
+        }
+    }
+    
+    private class AuthException: Exception
+    {
+        public AuthException(int statusCode, Dictionary<string, string> errors)
+        {
+            StatusCode = statusCode;
+            Errors = errors;
+        }
+
+        public int StatusCode { get; set; }
+        public Dictionary<string, string>? Errors { get; set; }
     }
 }
