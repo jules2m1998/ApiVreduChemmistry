@@ -30,6 +30,9 @@ namespace ApiVrEdu.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AtomicNumber")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasColumnType("text");
@@ -45,6 +48,9 @@ namespace ApiVrEdu.Migrations
 
                     b.Property<bool>("IsActivated")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("MassNumber")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()

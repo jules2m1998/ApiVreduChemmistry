@@ -69,7 +69,7 @@ public class TextureController : ControllerBase
             texture.Image = path ?? "";
             _context.Add(texture);
             var id = await _context.SaveChangesAsync();
-            texture = await _context.Textures.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id);
+            texture = await _context.Textures.AsNoTracking().FirstOrDefaultAsync(t => t.Id == texture.Id);
             return Created("", texture);
         }
         catch (Exception e)

@@ -1,7 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using System.Data.SqlClient;
 using System.IdentityModel.Tokens.Jwt;
-using System.Runtime.Serialization;
 using System.Security.Claims;
 using System.Text;
 using ApiVrEdu.Data;
@@ -22,10 +20,10 @@ namespace ApiVrEdu.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
+    private readonly DataContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly RoleManager<Role> _roleManager;
     private readonly UserManager<User> _userManager;
-    private readonly DataContext _context;
 
     public AuthController(IWebHostEnvironment env, UserManager<User> userManager, IConfiguration configuration,
         RoleManager<Role> roleManager, DataContext context)
@@ -115,7 +113,13 @@ public class AuthController : ControllerBase
         }
         catch (Exception e)
         {
-            return BadRequest(new Response { Status = "Error", Message = e.Message });
+            return BadRequest(new Response
+            {
+                Status = "Error", Errors = new Dictionary<string, string>
+                {
+                    { "image", e.Message }
+                }
+            });
         }
 
         user.Image = path;
@@ -285,7 +289,7 @@ public class AuthController : ControllerBase
             if (ex.InnerException is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } npgex)
                 throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
                 {
-                    {"0", ex.Message}
+                    { "0", ex.Message }
                 });
             var constraintName = npgex.ConstraintName;
             if (constraintName != null && constraintName.ToLower().Contains("phone"))
@@ -293,15 +297,15 @@ public class AuthController : ControllerBase
                 {
                     { "phoneNumber", "Ce numero de telephone est deja associe a un autre compte !" }
                 });
-            
+
             throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
             {
-                {"0", ex.Message}
+                { "0", ex.Message }
             });
         }
     }
-    
-    private class AuthException: Exception
+
+    private class AuthException : Exception
     {
         public AuthException(int statusCode, Dictionary<string, string> errors)
         {
