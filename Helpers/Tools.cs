@@ -7,7 +7,7 @@ public static class Tools
         if (dto is null) return entity;
         foreach (var prop in dto.GetType().GetProperties())
         {
-            if (except.Contains(prop.Name.ToLower())) continue;
+            if (except.Select(v => v.ToLower()).Contains(prop.Name.ToLower())) continue;
             var val = prop.GetValue(dto, null);
             if (val is null or "") continue;
             var type = entity?.GetType();

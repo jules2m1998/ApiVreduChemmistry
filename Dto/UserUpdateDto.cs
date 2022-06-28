@@ -9,9 +9,9 @@ public class UserUpdateDto
     public string? OldPassword { get; set; }
     public string? NewPassword { get; set; }
 
-    public string? Lastname { get; set; }
+    public string? LastName { get; set; } = string.Empty;
 
-    public string? Firstname { get; set; }
+    public string? FirstName { get; set; } = string.Empty;
 
     public string? Email { get; set; }
 

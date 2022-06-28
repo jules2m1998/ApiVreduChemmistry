@@ -13,8 +13,7 @@ public class RegisterElementDto
     [Required(ErrorMessage = "Couleur obligatoire !")]
     public string Color { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Image obligatoire !")]
-    public IFormFile Image { get; set; }
+    public IFormFile? Image { get; set; }
 
     [Required(ErrorMessage = "Nombre de masse obligatoire !")]
     public int MassNumber { get; set; }

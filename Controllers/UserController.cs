@@ -93,18 +93,7 @@ public class UserController : ControllerBase
                 Status = "Error"
             });
 
-        foreach (var prop in dto.GetType().GetProperties())
-        {
-            if (prop.Name.ToLower() is ("id" or "image" or "OldPassword" or "NewPassword")) continue;
-            var val = prop.GetValue(dto, null);
-            if (val is null) continue;
-            var type = user.GetType();
-            var pr = type.GetProperty(prop.Name);
-            pr?.SetValue(user, val);
-
-            if (dto.GetType().GetProperties().Length > 1 && dto.GetType().GetProperties().Last().Equals(prop))
-                user.UpdatedDate = DateTime.UtcNow;
-        }
+        var newUser = Tools.LoopToUpdateObject(user, dto, new[] { "id", "image", "oldpassword", "newPassword" });
 
         if (dto.OldPassword is not null && dto.NewPassword is not null)
         {
@@ -122,21 +111,21 @@ public class UserController : ControllerBase
             {
                 var path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "users" });
                 FileManager.DeleteFile(user.Image ?? "", _env);
-                user.Image = path;
+                newUser.Image = path;
             }
             catch (Exception e)
             {
                 return BadRequest(new Response { Status = "Error", Message = e.Message });
             }
 
-        var result = await _userManager.UpdateAsync(user);
+        var result = await _userManager.UpdateAsync(newUser);
         if (!result.Succeeded)
             return StatusCode(StatusCodes.Status500InternalServerError, new Response
             {
                 Status = "Error",
                 Message = "Veillez verifier vos informations et reessayer plus tard !"
             });
-        return Ok(user);
+        return Ok(newUser);
     }
 
     [HttpGet, Authorize(Roles = UserRole.Admin)]

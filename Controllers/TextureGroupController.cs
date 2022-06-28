@@ -13,11 +13,11 @@ using Microsoft.EntityFrameworkCore;
 namespace ApiVrEdu.Controllers;
 
 [ApiController, Authorize, Route("api/[controller]")]
-public class TextureGroupController: ControllerBase
+public class TextureGroupController : ControllerBase
 {
-    private readonly TextureRepository _repository;
-    private readonly UserManager<User> _manager;
     private readonly DataContext _context;
+    private readonly UserManager<User> _manager;
+    private readonly TextureRepository _repository;
 
     public TextureGroupController(TextureRepository repository, UserManager<User> manager, DataContext context)
     {
@@ -27,7 +27,8 @@ public class TextureGroupController: ControllerBase
     }
 
     [HttpPost, Route(""), Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<TextureGroup>> Group([Required(ErrorMessage = "Nom obligatoire !")][FromBody] string name)
+    public async Task<ActionResult<TextureGroup>> Group(
+        [Required(ErrorMessage = "Nom obligatoire !")] [FromBody] string name)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _manager.FindByIdAsync(userId);
@@ -45,7 +46,8 @@ public class TextureGroupController: ControllerBase
     public async Task<ActionResult<TextureGroup>> ByUser()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _context.Users.Include(user1 => user1.TextureGroups).FirstOrDefaultAsync(user1 => user1.Id == int.Parse(userId));
+        var user = await _context.Users.Include(user1 => user1.TextureGroups)
+            .FirstOrDefaultAsync(user1 => user1.Id == int.Parse(userId));
         if (user is null) return BadRequest();
 
         return Ok(user.TextureGroups);
@@ -54,7 +56,7 @@ public class TextureGroupController: ControllerBase
     [HttpGet, Route("")]
     public async Task<ActionResult<List<TextureGroup>>> GetAll()
     {
-        var textures = await _context.TextureGroups.ToListAsync();
+        var textures = await _context.TextureGroups.Include(group => group.User).ToListAsync();
 
         return Ok(textures);
     }
@@ -62,14 +64,15 @@ public class TextureGroupController: ControllerBase
     [HttpGet, Route("{id:int}")]
     public async Task<ActionResult<TextureGroup>> GetOne(int id)
     {
-        var texture = await _context.TextureGroups.FirstOrDefaultAsync(group => group.Id == id);
+        var texture = await _context.TextureGroups.Include(group => group.User)
+            .FirstOrDefaultAsync(group => group.Id == id);
 
         if (texture is null) return NotFound();
         return Ok(texture);
     }
 
     [HttpPut, Authorize(Roles = UserRole.Admin), Route("{id:int}")]
-    public async Task<ActionResult<TextureGroup>> Update(int id, [FromBody]string name)
+    public async Task<ActionResult<TextureGroup>> Update(int id, [FromBody] string name)
     {
         var group = await _context.TextureGroups.FirstOrDefaultAsync(textureGroup => textureGroup.Id == id);
         if (group is null) return NotFound();
