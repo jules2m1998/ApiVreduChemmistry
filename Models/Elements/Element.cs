@@ -1,24 +1,29 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using ApiVrEdu.Models.Reactions;
 using ApiVrEdu.Models.Textures;
 
 namespace ApiVrEdu.Models.Elements;
 
 public class Element : BaseModel, IModelImage
 {
-    [InverseProperty("Parent")] public ICollection<ElementChildren> Children = new List<ElementChildren>();
-
-    [InverseProperty("Children")] public ICollection<ElementChildren> Parents = new List<ElementChildren>();
-
     public string Name { get; set; } = string.Empty;
-    public string Symbol { get; set; } = string.Empty;
+    public string? Symbol { get; set; }
+    public string Color { get; set; } = string.Empty;
+    public int? MassNumber { get; set; }
+    public int? AtomicNumber { get; set; }
 
-    public User User { get; set; } = new();
+    public User User { get; set; }
 
-    public ElementType Type { get; set; } = new();
+    public ElementType? Type { get; set; }
 
-    public ElementGroup Group { get; set; } = new();
+    public ElementGroup? Group { get; set; }
 
-    public Texture Texture { get; set; } = new();
+    public Texture Texture { get; set; }
 
+    public List<Product> Products { get; set; }
+
+    [InverseProperty("Parent")] public List<ElementChildren> Children { get; set; }
+
+    [InverseProperty("Children")] public List<ElementChildren> Parents { get; set; }
     public string? Image { get; set; } = string.Empty;
 }

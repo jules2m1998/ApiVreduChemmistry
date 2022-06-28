@@ -1,305 +1,199 @@
-using System.ComponentModel.DataAnnotations;
-using ApiVrEdu.Exceptions;
+using System.Security.Claims;
+using ApiVrEdu.Data;
+using ApiVrEdu.Dto.Textures;
 using ApiVrEdu.Helpers;
+using ApiVrEdu.Models;
 using ApiVrEdu.Models.Textures;
-using ApiVrEdu.Repositories;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiVrEdu.Controllers;
 
 [ApiController]
-[Route("api/[controller]/[action]")]
+[Route("api/[controller]")]
+[Authorize]
 public class TextureController : ControllerBase
 {
-    private readonly IWebHostEnvironment _environment;
-    private readonly JwtService _jwtService;
-    private readonly TextureRepository _repository;
-    private readonly UserRepository _userRepository;
+    private readonly DataContext _context;
+    private readonly IWebHostEnvironment _env;
+    private readonly UserManager<User> _manager;
 
-    public TextureController(TextureRepository repository, JwtService jwtService, UserRepository userRepository,
-        IWebHostEnvironment environment)
+    public TextureController(DataContext context, UserManager<User> manager, IWebHostEnvironment env)
     {
-        _repository = repository;
-        _jwtService = jwtService;
-        _userRepository = userRepository;
-        _environment = environment;
+        _context = context;
+        _manager = manager;
+        _env = env;
     }
 
-    // Texture Group Management
     [HttpPost]
-    public ActionResult<TextureGroup> TextureGroup([Required(ErrorMessage = "Nom du group obligatoire")] string name)
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<Texture>> Create([FromForm] TextureRegisterDto dto)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is not { IsAdmin: true, IsActivated: true })
-            return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _manager.FindByIdAsync(userId);
+        if (user is null)
+            return BadRequest(new Response
+            {
+                Status = "Errror",
+                Errors = new Dictionary<string, string>
+                {
+                    { "0", "Utilisateur inexistant !" }
+                }
+            });
 
-        var textureGroup = new TextureGroup
+        var group = await _context.TextureGroups.FindAsync(dto.GroupId);
+
+        if (group is null)
+            return BadRequest(new Response
+            {
+                Status = "Errror",
+                Errors = new Dictionary<string, string>
+                {
+                    { "0", "group de texture inexistant !" }
+                }
+            });
+
+        var texture = new Texture
         {
-            Name = name,
+            Name = dto.Name,
+            Group = group,
             User = user
         };
 
+        string? path = null;
         try
         {
-            return Created("Group cree !", _repository.CreateGroup(textureGroup));
-        }
-        catch (DbUpdateException e)
-        {
-            return BadRequest(ExceptionCatcher.CatchUniqueViolation(e, new UniqueViolation
-            {
-                Name = "name",
-                Msg = "Ce group de texture existe deja !"
-            }));
+            path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "textures" });
+            texture.Image = path ?? "";
+            _context.Add(texture);
+            var id = await _context.SaveChangesAsync();
+            texture = await _context.Textures
+                .AsNoTracking()
+                .Include(t => t.User)
+                .Include(t => t.Group)
+                .FirstOrDefaultAsync(t => t.Id == texture.Id);
+            return Created("", texture);
         }
         catch (Exception e)
         {
-            return BadRequest(e.Message);
+            if (path != null) FileManager.DeleteFile(path, _env);
+            return BadRequest(new Response
+            {
+                Status = "Error",
+                Errors = new Dictionary<string, string>
+                {
+                    { "image", e.Message }
+                }
+            });
         }
     }
 
     [HttpPut]
-    public ActionResult<TextureGroup> TextureGroup(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id,
-        [Required(ErrorMessage = "Nom du group obligatoire")]
-        string name
-    )
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<Texture>> Update([FromForm] TextureUpdateDto dto)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is not { IsAdmin: true, IsActivated: true })
-            return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var texture = await _context.Textures.Include(t => t.User).AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == dto.Id);
+        if (texture is null) return NotFound();
 
-        var textureGroup = _repository.GetOneGroup(id);
-        if (textureGroup == null || textureGroup.User.Id != user.Id) return BadRequest("Group inexistant !");
-        textureGroup.Name = name;
-        try
+        if (dto.Image != null)
         {
-            return Ok(_repository.UpdateGroup(textureGroup));
-        }
-        catch (DbUpdateException e)
-        {
-            return BadRequest(ExceptionCatcher.CatchUniqueViolation(e, new UniqueViolation
+            string? path = null;
+            try
             {
-                Name = "name",
-                Msg = "Ce group de texture existe deja !"
-            }));
-        }
-        catch (Exception e)
-        {
-            return BadRequest(e.Message);
-        }
-    }
-
-    [HttpDelete]
-    public ActionResult TextureGroup(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is not { IsAdmin: true, IsActivated: true })
-            return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var textureGroup = _repository.GetOneGroup(id);
-        if (textureGroup == null || textureGroup.User.Id != user.Id) return BadRequest("Group inexistant !");
-        try
-        {
-            _repository.DeleteGroup(textureGroup);
-            return NoContent();
-        }
-        catch (DbUpdateException e)
-        {
-            return BadRequest(ExceptionCatcher.CatchUniqueViolation(e, new UniqueViolation
+                path = await FileManager.CreateFile(dto.Image, texture.User.UserName, _env, new[] { "textures" });
+                if (path is not null)
+                {
+                    FileManager.DeleteFile(texture.Image, _env);
+                    texture.Image = path;
+                }
+            }
+            catch (Exception e)
             {
-                Name = "name",
-                Msg = "Ce group de texture existe deja !"
-            }));
+                FileManager.DeleteFile(path ?? "", _env);
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "image", e.Message }
+                    }
+                });
+            }
         }
-        catch (Exception e)
-        {
-            return BadRequest(e.Message);
-        }
+
+        var newTexture = Tools.LoopToUpdateObject(texture, dto, new[] { "id", "image" });
+        _context.Update(newTexture);
+        await _context.SaveChangesAsync();
+
+        return Ok(texture);
     }
 
     [HttpGet]
-    public ActionResult<List<TextureGroup>> TextureGroup()
+    public async Task<ActionResult<List<Texture>>> All()
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        return Ok(_repository.GetAllGroups());
+        return Ok(await _context.Textures.AsNoTracking().Include(texture => texture.User)
+            .Include(texture => texture.Group).ToListAsync());
     }
 
-    [HttpGet("{id:int}")]
-    public ActionResult<TextureGroup> OneTextureGroup([Required(ErrorMessage = "Identifiant obligatoire")] int id)
+    [HttpGet]
+    [Route("{id:int}")]
+    public async Task<ActionResult<Texture>> One(int id)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var group = _repository.GetOneGroup(id);
-
-        if (group is null) return BadRequest("Group inexistant");
-        return Ok(group);
-    }
-
-    // Texture Management
-    [HttpPost]
-    public async Task<ActionResult<Texture>> Texture(
-        [Required(ErrorMessage = "Le nom de la texture est obligatoire !")] [FromForm]
-        string name,
-        [Required(ErrorMessage = "La couleur de la texture est obligatoire !")] [FromForm]
-        string color,
-        [Required(ErrorMessage = "Le group de la texture est obligatoire !")] [FromForm]
-        int groupId,
-        [Required(ErrorMessage = "L'image de la texture est obligatoire !")]
-        IFormFile image
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var group = _repository.GetOneGroup(groupId);
-        if (group is null) return Unauthorized("Veiller renseigner un group valide !");
-
-        try
-        {
-            var path = await FileManager.CreateFile(image, user.UserName, _environment, new[] { "textures" });
-            if (path == null) return BadRequest("Un probleme est survenu lors de la sauvegarde de l'image !");
-            var texture = new Texture
-            {
-                Name = name,
-                Image = path,
-                Color = color,
-                User = user,
-                Group = group
-            };
-            return Created("", _repository.Create(texture));
-        }
-        catch (Exception e)
-        {
-            return BadRequest(e.Message);
-        }
-    }
-
-    [HttpPut]
-    public async Task<ActionResult<Texture>> Texture(
-        [Required(ErrorMessage = "Identifiant obligatoire !")] [FromForm]
-        int id,
-        [FromForm] string? name,
-        [FromForm] string? color,
-        [FromForm] int? groupId,
-        IFormFile? image
-    )
-    {
-        var texture = _repository.Get(id);
-        if (texture == null) return BadRequest("Texture ineexistante !");
-        string?[] props = { name, color };
-        var isNull = props.All(p => p == null);
-        if (isNull && groupId == null && image == null) return BadRequest("Aucune information transmise !");
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        if (image != null)
-        {
-            FileManager.DeleteFile(texture.Image ?? "", _environment);
-            var path = await FileManager.CreateFile(image, user.UserName, _environment, new[] { "textures" });
-            texture.Image = path ?? "";
-        }
-
-        if (name != null) texture.Name = name;
-
-        if (color != null) texture.Color = color;
-
-        if (groupId != null)
-        {
-            var group = _repository.GetOneGroup((int)groupId);
-            if (group == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-            texture.Group = group;
-        }
-
-        return Ok(_repository.Update(texture));
+        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (texture == null) return NotFound();
+        return Ok(texture);
     }
 
     [HttpDelete]
-    public ActionResult Texture(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
+    [Route("{id:int}")]
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult> Delete(int id)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var texture = _repository.Get(id);
-        if (texture == null) return BadRequest("Texture inexistante");
-        if (texture.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        _repository.Delete(texture);
+        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (texture == null) return NotFound();
+        FileManager.DeleteFile(texture.Image, _env);
+        _context.Remove(texture);
+        await _context.SaveChangesAsync();
 
         return NoContent();
     }
 
-    [HttpGet("{id:int}")]
-    public ActionResult<Texture> OneTexture(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var texture = _repository.Get(id);
-        if (texture == null) return BadRequest("Texture inexistante");
-        if (texture.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        return Ok(texture);
-    }
-    
     [HttpGet]
-    public ActionResult<List<Texture>> Texture()
+    [Route("group/{id:int}")]
+    public ActionResult<List<Texture>> Group(int id)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        return Ok(_repository.Get());
+        var textures = _context.Textures
+            .Include(texture => texture.User)
+            .Include(texture => texture.Group)
+            .AsNoTracking()
+            .Where(t => t.Group.Id == id).ToList();
+        return Ok(textures);
     }
-    
+
+    [HttpGet]
+    [Route("user")]
+    public ActionResult<List<Texture>> ByUser()
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (id is null)
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    { "0", "Veillez verifier que vous etes bien authentifie avant de continuer !!" }
+                },
+                Status = "Error"
+            });
+
+        var textures = _context.Textures
+            .Include(texture => texture.User)
+            .Include(texture => texture.Group)
+            .AsNoTracking()
+            .Where(t => t.User.Id == int.Parse(id)).ToList();
+        return Ok(textures);
+    }
 }

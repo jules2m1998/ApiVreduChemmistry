@@ -6,7 +6,6 @@ public class ElementChildren
     public int Quantity { get; set; }
     public int Position { get; set; }
 
-    public Element Parent { get; set; } = new();
-
-    public Element Children { get; set; } = new();
+    public Element Parent { get; set; }
+    public Element Children { get; set; }
 }

@@ -1,31 +1,78 @@
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using ApiVrEdu.Data;
 using ApiVrEdu.Dto;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
-using ApiVrEdu.Repositories;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 
 namespace ApiVrEdu.Controllers;
 
-[Route("api/[controller]/[action]")]
+[Route("api/[controller]")]
 [ApiController]
 public class AuthController : ControllerBase
 {
+    private readonly IConfiguration _configuration;
+    private readonly DataContext _context;
     private readonly IWebHostEnvironment _env;
-    private readonly JwtService _jwtService;
-    private readonly UserRepository _repository;
+    private readonly RoleManager<Role> _roleManager;
+    private readonly UserManager<User> _userManager;
 
-    public AuthController(UserRepository repository, IWebHostEnvironment env, JwtService jwtService)
+    public AuthController(IWebHostEnvironment env, UserManager<User> userManager, IConfiguration configuration,
+        RoleManager<Role> roleManager, DataContext context)
     {
-        _repository = repository;
         _env = env;
-        _jwtService = jwtService;
+        _userManager = userManager;
+        _configuration = configuration;
+        _roleManager = roleManager;
+        _context = context;
     }
 
     [HttpPost]
-    public async Task<ActionResult<User>> Register(
+    [Route("login")]
+    public async Task<IActionResult> Login([FromForm] LoginDto model)
+    {
+        var user = await _userManager.FindByNameAsync(model.Username.ToLower());
+        if (user == null || !await _userManager.CheckPasswordAsync(user, model.Password.ToLower()))
+            return Unauthorized();
+        if (!user.IsActivated)
+            return Unauthorized(new Response
+            {
+                Status = "Error",
+                Message =
+                    "Votre compte est desactive veillez demander consulter un administrateur afin qu'il l'active !"
+            });
+        var userRoles = await _userManager.GetRolesAsync(user);
+
+        var authClaims = new List<Claim>
+        {
+            new(ClaimTypes.Name, user.UserName),
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+        };
+
+        authClaims.AddRange(userRoles.Select(userRole => new Claim(ClaimTypes.Role, userRole)));
+
+        var token = GetToken(authClaims);
+
+        return Ok(new
+        {
+            token = new JwtSecurityTokenHandler().WriteToken(token),
+            expiration = token.ValidTo
+        });
+    }
+
+
+    [HttpPost]
+    [Route("register")]
+    public async Task<IActionResult> Register(
         [Required(ErrorMessage = "Le nom d'utilisateur est obligatoire !")] [FromForm]
         string username,
         [Required(ErrorMessage = "Le mot de passe est obligatoire !")] [FromForm]
@@ -45,98 +92,228 @@ public class AuthController : ControllerBase
         SexType sex
     )
     {
+        User user = new()
+        {
+            Email = email.ToLower(),
+            SecurityStamp = Guid.NewGuid().ToString(),
+            UserName = username.ToLower(),
+            LastName = lastname.ToLower(),
+            FirstName = firstname.ToLower(),
+            BirthDate = birthDate,
+            Sex = sex,
+            PhoneNumber = phoneNumber,
+            CreatedDate = DateTime.UtcNow,
+            UpdatedDate = DateTime.UtcNow
+        };
         string? path = null;
+
         try
         {
             if (image != null) path = await FileManager.CreateFile(image, username, _env, new[] { "users" });
+        }
+        catch (Exception e)
+        {
+            return BadRequest(new Response
+            {
+                Status = "Error", Errors = new Dictionary<string, string>
+                {
+                    { "image", e.Message }
+                }
+            });
+        }
 
-            var user = _repository.Create(
-                username,
-                BCrypt.Net.BCrypt.HashPassword(password),
-                lastname,
-                firstname,
-                email,
-                sex,
-                birthDate,
-                path,
-                phoneNumber
-            );
-            return Created("Utilisateur cree", user);
+        user.Image = path;
+
+        try
+        {
+            await CreateUser(user, password);
         }
-        catch (DbUpdateException ex)
+        catch (AuthException e)
         {
             FileManager.DeleteFile(path ?? "", _env);
-            if (ex.InnerException is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } npgex)
-                return BadRequest(ex.Message);
-            var constraintName = npgex.ConstraintName;
-            if (constraintName != null && constraintName.ToLower().Contains("email"))
-                return BadRequest("Cette addresse existe deja veillez utuliser une nouvelle !");
-            if (constraintName != null && constraintName.ToLower().Contains("phone"))
-                return BadRequest("Ce numero de telephone est deja utilise veillez utiliser un nouveau !");
-            if (constraintName != null && constraintName.ToLower().Contains("username"))
-                return BadRequest("Ce Nom d'utilisateur est deja utilise veillez utiliser un nouveau !");
-            return BadRequest("Champs mal renseigne veilllez verifier vos informations !");
+            return StatusCode(e.StatusCode, new Response
+            {
+                Errors = e.Errors,
+                Status = "Error"
+            });
         }
-        catch (Exception ex)
-        {
-            FileManager.DeleteFile(path ?? "", _env);
-            return BadRequest(ex.Message);
-        }
+
+        if (!await _roleManager.RoleExistsAsync(UserRole.User))
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.User
+            });
+        if (await _roleManager.RoleExistsAsync(UserRole.User))
+            await _userManager.AddToRoleAsync(user, UserRole.User);
+        return Ok(new Response { Status = "Succes", Message = "Utilisateur cree avec succes !" });
     }
 
     [HttpPost]
-    public ActionResult<User> Login(LoginDto dto)
+    [Route("register-admin")]
+    public async Task<IActionResult> RegisterAdmin(
+        [Required(ErrorMessage = "Le nom d'utilisateur est obligatoire !")] [FromForm]
+        string username,
+        [Required(ErrorMessage = "Le mot de passe est obligatoire !")] [FromForm]
+        string password,
+        [Required(ErrorMessage = "Le nom est obligatoire !")] [FromForm]
+        string lastname,
+        [Required(ErrorMessage = "Le prenom est obligatoire !")] [FromForm]
+        string firstname,
+        [Required] [FromForm] [EmailAddress(ErrorMessage = "L'adresse email n'est pas valid")]
+        string email,
+        [Required] [FromForm] [Phone(ErrorMessage = "Le numero de telephone n'est pas valid")]
+        string phoneNumber,
+        IFormFile? image,
+        [Required(ErrorMessage = "La date de naissance est obligatoire !")] [FromForm]
+        DateTime birthDate,
+        [Required(ErrorMessage = "Le sexe est obligatoire !")] [FromForm]
+        SexType sex
+    )
     {
-        var user = _repository.GetByUserName(dto.Username);
-        if (user == null) return BadRequest(new { message = "Nom d'utilisateur ou mot de passe incorrect !" });
-        if (!user.IsActivated)
-            return BadRequest(new { message = "Compte inactif veillez contacter un administrateur!" });
-        if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.HashedPassword))
-            return BadRequest(new { message = "Nom d'utilisateur ou mot de passe incorrect !" });
+        var userExists = await _userManager.FindByNameAsync(username.ToLower());
+        if (userExists != null)
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new Response { Status = "Error", Message = "User already exists!" });
 
-        var jwt = _jwtService.Generate(user.Id);
-        // Add to cookies
-        Response.Cookies.Append("jwt", jwt, new CookieOptions
+        User user = new()
         {
-            HttpOnly = true,
-            Secure = true,
-            MaxAge = DateTimeOffset.Now.AddDays(1).TimeOfDay
-        });
+            Email = email.ToLower(),
+            SecurityStamp = Guid.NewGuid().ToString(),
+            UserName = username.ToLower(),
+            LastName = lastname.ToLower(),
+            FirstName = firstname.ToLower(),
+            BirthDate = birthDate,
+            Sex = sex,
+            PhoneNumber = phoneNumber,
+            CreatedDate = DateTime.UtcNow,
+            UpdatedDate = DateTime.UtcNow,
+            IsActivated = true
+        };
+        string? path = null;
 
-        return Ok(new
+        try
         {
-            message = "success"
-        });
+            if (image != null) path = await FileManager.CreateFile(image, username, _env, new[] { "users" });
+        }
+        catch (Exception e)
+        {
+            return BadRequest(new Response { Status = "Error", Message = e.Message });
+        }
+
+        user.Image = path;
+        var result = await _userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new Response
+                    { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+
+        if (!await _roleManager.RoleExistsAsync(UserRole.Admin))
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.Admin
+            });
+        if (!await _roleManager.RoleExistsAsync(UserRole.User))
+            await _roleManager.CreateAsync(new Role
+            {
+                Name = UserRole.User
+            });
+
+        if (await _roleManager.RoleExistsAsync(UserRole.Admin))
+            await _userManager.AddToRoleAsync(user, UserRole.Admin);
+        return Ok(new Response { Status = "Success", Message = "User created successfully!" });
     }
 
-    [HttpGet]
-    public ActionResult Logout()
+    [HttpGet, Authorize, Route("user")]
+    public async Task<ActionResult<User>> Current()
     {
-        Response.Cookies.Delete("jwt");
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return BadRequest(new Response
+            {
+                Message = "Token invalide !",
+                Status = "Error"
+            });
+        var user = await _context.Users.FirstOrDefaultAsync(user1 => user1.Id == int.Parse(userId));
 
-        return Ok(new
+        return user switch
         {
-            message = "Success"
-        });
+            null => NotFound(new Response { Message = "Utilisateur inexistant !", Status = "Error" }),
+            { IsActivated: false } => Unauthorized(new Response
+            {
+                Message = "Compte innactif veillez contacter un administrateur !", Status = "Error"
+            }),
+            _ => user
+        };
     }
 
-    [HttpGet]
-    public ActionResult<User> CurrentUser()
+
+    private JwtSecurityToken GetToken(IEnumerable<Claim> authClaims)
+    {
+        var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"] ?? ""));
+
+        var token = new JwtSecurityToken(
+            _configuration["JWT:ValidIssuer"],
+            _configuration["JWT:ValidAudience"],
+            expires: DateTime.Now.AddHours(3),
+            claims: authClaims,
+            signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+        );
+
+        return token;
+    }
+
+    private async Task<User> CreateUser(User user, string password)
     {
         try
         {
-            var jwt = Request.Cookies["jwt"];
-            var token = _jwtService.Verify(jwt);
-            var userId = int.Parse(token.Issuer);
-            var user = _repository.GetOne(userId);
-            if (user == null) return BadRequest(new { message = "Compte inexistant !" });
-            if (!user.IsActivated)
-                return BadRequest(new { message = "Compte inactif veillez contacter un administrateur!" });
-            return Ok(user);
+            var result = await _userManager.CreateAsync(user, password);
+            if (result.Succeeded) return user;
+            var errors = new Dictionary<string, string>();
+            foreach (var identityError in result.Errors)
+            {
+                switch (identityError.Code)
+                {
+                    case "DuplicateUserName":
+                        errors.Add("username", "Cette utilisateur existe deja cree en un nouveau ou connectez vous !");
+                        break;
+                    case "DuplicateEmail":
+                        errors.Add("email", "Cette adresse email est deja associe a un autre compte !");
+                        break;
+                }
+            }
+
+            throw new AuthException(StatusCodes.Status400BadRequest, errors);
         }
-        catch
+        catch (DbUpdateException ex)
         {
-            return Unauthorized();
+            if (ex.InnerException is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } npgex)
+                throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+                {
+                    { "0", ex.Message }
+                });
+            var constraintName = npgex.ConstraintName;
+            if (constraintName != null && constraintName.ToLower().Contains("phone"))
+                throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+                {
+                    { "phoneNumber", "Ce numero de telephone est deja associe a un autre compte !" }
+                });
+
+            throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
+            {
+                { "0", ex.Message }
+            });
         }
+    }
+
+    private class AuthException : Exception
+    {
+        public AuthException(int statusCode, Dictionary<string, string> errors)
+        {
+            StatusCode = statusCode;
+            Errors = errors;
+        }
+
+        public int StatusCode { get; set; }
+        public Dictionary<string, string>? Errors { get; set; }
     }
 }

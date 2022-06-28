@@ -50,11 +50,11 @@ public class TextureRepository
         return _context.TextureGroups.ToList();
     }
 
-    public TextureGroup CreateGroup(TextureGroup group)
+    public TextureGroup? CreateGroup(TextureGroup group)
     {
         _context.TextureGroups.Add(group);
         _context.SaveChanges();
-        return group;
+        return _context.TextureGroups.Find(group.Id);
     }
 
     public TextureGroup UpdateGroup(TextureGroup group)

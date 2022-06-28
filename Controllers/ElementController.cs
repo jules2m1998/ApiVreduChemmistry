@@ -1,485 +1,469 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
+using System.Security.Claims;
+using ApiVrEdu.Data;
 using ApiVrEdu.Dto;
+using ApiVrEdu.Dto.Elements;
+using ApiVrEdu.Exceptions;
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models.Elements;
-using ApiVrEdu.Repositories;
+using ApiVrEdu.Models.Textures;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
+using Newtonsoft.Json;
 
 namespace ApiVrEdu.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class ElementController : ControllerBase
 {
+    private readonly DataContext _context;
+    private readonly IIncludableQueryable<Element, Texture> _elements;
     private readonly IWebHostEnvironment _env;
-    private readonly JwtService _jwtService;
-    private readonly ElementRepository _repository;
-    private readonly TextureRepository _textureRepository;
-    private readonly UserRepository _userRepository;
 
-    public ElementController(ElementRepository repository, UserRepository userRepository, JwtService jwtService,
-        TextureRepository textureRepository, IWebHostEnvironment env)
+    public ElementController(DataContext context, IWebHostEnvironment env)
     {
-        _repository = repository;
-        _userRepository = userRepository;
-        _jwtService = jwtService;
-        _textureRepository = textureRepository;
+        _context = context;
         _env = env;
+        _elements = _context.Elements
+            .Include(e => e.User)
+            .Include(e => e.Group)
+            .Include(e => e.Type)
+            .Include(e => e.Children)
+            .ThenInclude(children => children.Children)
+            .Include(e => e.Texture);
     }
 
-    // Element
-    [HttpPost]
-    [Route("")]
-    public async Task<ActionResult<Element>> Element(
-        [Required(ErrorMessage = "Nom de l'element obligatoire")] [FromForm]
-        string name,
-        [Required(ErrorMessage = "Symbole obligatoire")] [FromForm]
-        string symbol,
-        [Required(ErrorMessage = "Texture obligatoire")] [FromForm]
-        int idTexture,
-        [Required(ErrorMessage = "Type obligatoire")] [FromForm]
-        int idType,
-        [Required(ErrorMessage = "Groupe obligatoire")] [FromForm]
-        int idGroup,
-        [Required(ErrorMessage = "Image obligatoire")]
-        IFormFile image,
-        [FromForm] string? elementChildrenStr
-    )
+    [HttpPut]
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<Element>> Create([FromForm] UpdateElementDto dto)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var texture = _textureRepository.Get(idTexture);
-        if (texture is null) return BadRequest("Texture inexistante");
-        var type = _repository.Type(idType);
-        if (type is null) return BadRequest("Type inexistante");
-        var group = _repository.Group(idGroup);
-        if (group is null) return BadRequest("Group inexistante");
+        var element = await _context
+            .Elements
+            .Include(e => e.Children)
+            .FirstOrDefaultAsync(e => e.Id == dto.Id);
+
+        if (element is null || element.Children.Count > 0) return NotFound();
+
+        var newElt = Tools.LoopToUpdateObject(element, dto, new[] { "id", "image" });
+
+        if (dto.Image is null)
+        {
+            _context.Update(newElt);
+            await _context.SaveChangesAsync();
+            return Ok(newElt);
+        }
 
         string? path = null;
-
         try
         {
-            path = await FileManager.CreateFile(image, user.UserName, _env, new[] { "elements" });
-            var element = new Element
-            {
-                Name = name,
-                Symbol = symbol,
-                Image = path,
-                User = user,
-                Type = type,
-                Group = group,
-                Texture = texture
-            };
-
-            if (elementChildrenStr == null) return Created("", _repository.Element(element));
-
-            try
-            {
-                var elt = _repository.Element(element);
-                var jsonStr = elementChildrenStr
-                        .Replace("id", "Id")
-                        .Replace("quantity", "Quantity")
-                        .Replace("position", "Position")
-                    ;
-                var deserialize = JsonSerializer.Deserialize<List<ElementChildrenDto>>(jsonStr);
-                if (deserialize is null) return BadRequest("Aucun atome transmit pour cette molecule 1");
-                var ids = deserialize.Select(ec => ec.Id).ToList();
-                var atoms = _repository.Element(ids);
-
-                if (ids.Count != atoms.Count) return BadRequest("Certains elements transmit n'existent pas !");
-                var ecs = deserialize.Select((ec, id) => new ElementChildren
-                {
-                    Children = atoms[id],
-                    Position = ec.Position,
-                    Quantity = ec.Quantity,
-                    Parent = elt
-                }).ToList();
-
-                _repository.Children(ecs);
-
-                element = _repository.Element(elt.Id);
-
-                return Created("", element);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-                return BadRequest("Le format des atomes pour la molecule n'est pas le bon");
-            }
+            path = await FileManager.CreateFile(dto.Image, newElt.Symbol ?? "update", _env, new[] { "elements" });
+            FileManager.DeleteFile(element.Image ?? "", _env);
+            newElt.Image = path;
         }
         catch (Exception e)
         {
             FileManager.DeleteFile(path ?? "", _env);
-            return BadRequest(e.Message);
+            return BadRequest(new Response
+            {
+                Status = "Error", Errors = new Dictionary<string, string>
+                {
+                    { "image", e.Message }
+                }
+            });
         }
+
+        _context.Update(newElt);
+        await _context.SaveChangesAsync();
+        return Ok(newElt);
     }
 
-    [HttpPut]
-    public async Task<ActionResult<Element>> Element(
-        [Required(ErrorMessage = "Identification obligatoire")]
-        int id,
-        string? name,
-        string? symbol,
-        int? idTexture,
-        int? idType,
-        int? idGroup,
-        IFormFile? image
-    )
+    [HttpPost]
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult<Element>> Create([FromForm] RegisterElementDto dto)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _context.Users.FindAsync(int.Parse(userId));
 
-        var element = _repository.Element(id);
-        if (element == null) return BadRequest("Element inexistant !");
-        if (element.User.Id != user.Id) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        if (user is null) return Unauthorized();
 
+        var group = await _context.ElementGroups.FindAsync(dto.GroupId);
+        if (group is null)
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    {
+                        "group",
+                        "Group d'element inexistant !"
+                    }
+                }
+            });
+        var type = await _context.ElementTypes.FindAsync(dto.TypeId);
+        if (type is null)
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    {
+                        "type",
+                        "Type d'element chimique introuvable !"
+                    }
+                }
+            });
 
-        if (name != null)
+        var texture = await _context.Textures.FindAsync(dto.TextureId);
+        if (texture is null)
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    {
+                        "texture",
+                        "Texture d'element chimique introuvable !"
+                    }
+                }
+            });
+
+        var element = new Element
         {
-            element.Name = name;
-        }
-
-        if (symbol != null)
-        {
-            element.Symbol = symbol;
-        }
-
-        if (idTexture != null)
-        {
-            var texture = _textureRepository.Get(id);
-            if (texture == null) return BadRequest("Texture inexistant !");
-            element.Texture = texture;
-        }
-
-        if (idType != null)
-        {
-            var type = _repository.Type(id);
-            if (type == null) return BadRequest("Type d'elemeent inexistant !");
-            element.Type = type;
-        }
-
-        if (idGroup != null)
-        {
-            var group = _repository.Group(id);
-            if (group == null) return BadRequest("Group d'element inexistant !");
-            element.Group = group;
-        }
-
-        if (image != null)
+            Name = dto.Name,
+            Symbol = dto.Symbol,
+            Color = dto.Color,
+            MassNumber = dto.MassNumber,
+            AtomicNumber = dto.AtomicNumber,
+            User = user,
+            Group = group,
+            Type = type,
+            Texture = texture
+        };
+        if (dto.Image is not null)
         {
             string? path = null;
             try
             {
-                path = await FileManager.CreateFile(image, user.UserName, _env, new[] { "elements" });
+                path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "elements" });
                 element.Image = path;
             }
             catch (Exception e)
             {
                 FileManager.DeleteFile(path ?? "", _env);
-                return BadRequest(e.Message);
+                return BadRequest(new Response
+                {
+                    Status = "Error", Errors = new Dictionary<string, string>
+                    {
+                        { "image", e.Message }
+                    }
+                });
             }
         }
 
-        return Ok(_repository.UpdateElement(element));
+        _context.Add(element);
+        var id = await _context.SaveChangesAsync();
+
+        element = await _context.Elements
+            .AsNoTracking()
+            .Include(e => e.User)
+            .Include(e => e.Group)
+            .Include(e => e.Type)
+            .Include(e => e.Texture)
+            .FirstOrDefaultAsync(e => e.Id == element.Id);
+
+        return Created("", element);
     }
 
     [HttpGet]
-    public ActionResult<List<Element>> Element()
+    public async Task<ActionResult<List<Element>>> GetAll()
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
+        var all = await _elements.AsNoTracking().ToListAsync();
 
-        return Ok(_repository.Element());
+        return Ok(all);
     }
 
     [HttpGet]
     [Route("{id:int}")]
-    public ActionResult<Element> Element(
-        [Required(ErrorMessage = "Identification obligatoire")]
-        int id
-        )
+    public async Task<ActionResult<Element>> GetOne(int id)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        return Ok(_repository.Element(id));
-    }
-
-    // Group
-    [HttpPost]
-    [Route("Group")]
-    public ActionResult<ElementGroup> Group(
-        [Required(ErrorMessage = "Nom obligatoire !")]
-        string name
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var group = new ElementGroup
-        {
-            Name = name,
-            User = user
-        };
-
-        return Created("", _repository.Group(group));
-    }
-
-    [HttpPut]
-    [Route("Group")]
-    public ActionResult<ElementGroup> Group(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id,
-        [Required(ErrorMessage = "Nom obligatoire !")]
-        string name
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var group = _repository.Group(id);
-        if (group == null) return BadRequest("Group inexistant !");
-        if (group.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        group.Name = name;
-        return Ok(_repository.UpdateGroup(group));
-    }
-
-    [HttpGet]
-    [Route("Group/{id:int}")]
-    public ActionResult<ElementGroup> OneGroup([Required(ErrorMessage = "Identifiant obligatoire")] int id)
-    {
-        var group = _repository.Group(id);
-        if (group is null) return BadRequest("Group innexistant");
-        return Ok(group);
-    }
-
-    [HttpGet]
-    [Route("Group")]
-    public ActionResult<List<ElementGroup>> Group()
-    {
-        return Ok(_repository.Group());
-    }
-
-
-    [HttpDelete]
-    [Route("Group")]
-    public ActionResult DeleteGroup(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var group = _repository.Group(id);
-        if (group == null) return BadRequest("Group inexistant !");
-        if (group.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        _repository.DeleteGroup(group);
-        return NoContent();
-    }
-
-    [HttpPut]
-    [Route("ActivateGroup")]
-    public ActionResult<ElementGroup> Group(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var group = _repository.Group(id);
-        if (group == null) return BadRequest("Group inexistant !");
-        if (group.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        group.IsActivated = true;
-
-        return Ok(_repository.UpdateGroup(group));
-    }
-
-    [HttpPut]
-    [Route("DeactivateGroup")]
-    public ActionResult<ElementGroup> DeactivateGroup(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var group = _repository.Group(id);
-        if (group == null) return BadRequest("Group inexistant !");
-        if (group.User.Id != userId) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        group.IsActivated = false;
-
-        return Ok(_repository.UpdateGroup(group));
-    }
-
-    // Type
-    [HttpPost]
-    [Route("Type")]
-    public ActionResult<ElementType> Type(
-        [Required(ErrorMessage = "Nom obligatoire !")]
-        string name
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-
-        var type = new ElementType
-        {
-            Name = name,
-            User = user
-        };
-
-        return Created("", _repository.Type(type));
-    }
-
-    [HttpPut]
-    [Route("Type")]
-    public ActionResult<ElementType> Type(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id,
-        [Required(ErrorMessage = "Nom obligatoire !")]
-        string name
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var type = _repository.Type(id);
-        if (type == null) return BadRequest("Type inexistant !");
-
-        type.Name = name;
-
-        return Ok(_repository.UpdateType(type));
-    }
-
-    [HttpPut]
-    [Route("ActivateType")]
-    public ActionResult<ElementType> UpdateType(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var type = _repository.Type(id);
-        if (type == null) return BadRequest("Type inexistant !");
-
-        type.IsActivated = true;
-
-        return Ok(_repository.UpdateType(type));
-    }
-
-    [HttpPut]
-    [Route("DeactivateType")]
-    public ActionResult<ElementType> DeactivateType(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
-    {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var type = _repository.Type(id);
-        if (type == null) return BadRequest("Type inexistant !");
-
-        type.IsActivated = false;
-
-        return Ok(_repository.UpdateType(type));
+        var one = await _elements.AsNoTracking().FirstOrDefaultAsync(element => element.Id == id);
+        if (one is null) return NotFound();
+        return Ok(one);
     }
 
     [HttpDelete]
-    [Route("Type")]
-    public ActionResult Type(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
+    [Route("{id:int}")]
+    [Authorize(Roles = UserRole.Admin)]
+    public async Task<ActionResult> Delete(int id)
     {
-        var jwt = Request.Cookies["jwt"];
-        if (jwt == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var userId = _jwtService.GetPayload(jwt ?? "");
-        if (userId == null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var user = _userRepository.GetOne((int)userId);
-        if (user is { IsAdmin: false } or null) return Unauthorized("Vous ne pouvez pas effectuer cette action !");
-        var type = _repository.Type(id);
-        if (type == null) return BadRequest("Type inexistant !");
+        var one = await _elements.AsNoTracking().FirstOrDefaultAsync(element => element.Id == id);
+        if (one is null) return NotFound();
+        FileManager.DeleteFile(one.Image ?? "", _env);
+        _context.Remove(one);
+        await _context.SaveChangesAsync();
 
-        _repository.DeleteType(type);
         return NoContent();
     }
 
-    [HttpGet]
-    [Route("Type/{id:int}")]
-    public ActionResult<ElementType?> OneType(
-        [Required(ErrorMessage = "Identifiant obligatoire")]
-        int id
-    )
+    [HttpPost]
+    [Route("molecule")]
+    public async Task<ActionResult<Element>> CreateMolecule([FromForm] RegisterMoleculeDto dto)
     {
-        var type = _repository.Type(id);
-        if (type == null) return BadRequest("Type inexistant !");
-        return Ok(type);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _context.Users.FindAsync(int.Parse(userId));
+        if (user is null) return Unauthorized();
+        var texture = await _context.Textures.FindAsync(dto.TextureId);
+        if (texture is null)
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    {
+                        "texture",
+                        "Texture d'element chimique introuvable !"
+                    }
+                }
+            });
+
+        List<Compose>? atoms;
+
+        try
+        {
+            atoms = JsonConvert.DeserializeObject<List<Compose>>(dto.Atomes);
+        }
+        catch
+        {
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    { "atoms", "Fomat d'atome non supporte !" }
+                }
+            });
+        }
+
+        if (atoms is null or { Count: 0 })
+            return BadRequest(new Response
+            {
+                Errors = new Dictionary<string, string>
+                {
+                    { "atoms", "Veillez renseigner des atomes pour la molecule !" }
+                }
+            });
+
+        Element? element;
+
+        try
+        {
+            var children = atoms.Select(atom =>
+            {
+                var elt = _context.Elements
+                    .Include(e => e.Children)
+                    .FirstOrDefault(e => e.Id == atom.Id);
+
+                if (elt is null)
+                    throw new ExceptionResponse
+                    {
+                        Errors = new Dictionary<string, string>
+                        {
+                            {
+                                "atoms",
+                                "L'un ou plusieurs des atomes renseigne inexistant veiller en renseigner des nouveau ou les creer !"
+                            }
+                        }
+                    };
+                if (elt.Children.Count > 0)
+                    throw new ExceptionResponse
+                    {
+                        Errors = new Dictionary<string, string>
+                        {
+                            {
+                                "atoms",
+                                "L'un ou plusieurs de vos elemets sont des molecules !"
+                            }
+                        }
+                    };
+
+                return new ElementChildren
+                {
+                    Quantity = atom.Quantity,
+                    Children = elt,
+                    Position = atom.Position
+                };
+            }).ToList();
+
+            element = new Element
+            {
+                Name = dto.Name,
+                Color = dto.Color,
+                Texture = texture,
+                User = user,
+                Children = children
+            };
+        }
+        catch (ExceptionResponse e)
+        {
+            return BadRequest(new Response
+            {
+                Errors = e.Errors
+            });
+        }
+
+        if (dto.Image is not null)
+        {
+            string? path = null;
+            try
+            {
+                path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "elements" });
+                element.Image = path;
+            }
+            catch (Exception e)
+            {
+                FileManager.DeleteFile(path ?? "", _env);
+                return BadRequest(new Response
+                {
+                    Status = "Error", Errors = new Dictionary<string, string>
+                    {
+                        { "image", e.Message }
+                    }
+                });
+            }
+        }
+
+        _context.Elements.Add(element);
+        await _context.SaveChangesAsync();
+
+        var el = await _elements.AsNoTracking().FirstOrDefaultAsync(e => e.Id == element.Id);
+        return Created("", el);
     }
 
-    [HttpGet]
-    [Route("Type")]
-    public ActionResult<List<ElementType>> Type()
+    [HttpPut]
+    [Route("molecule")]
+    public async Task<ActionResult<Element>> UpdateMolecule([FromForm] MoleculeUpdateDto dto)
     {
-        return Ok(_repository.Type());
+        var element = await _context
+            .Elements
+            .Include(e => e.Children)
+            .FirstOrDefaultAsync(e => e.Id == dto.Id);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _context.Users.FindAsync(int.Parse(userId));
+        if (user is null) return Unauthorized();
+        if (element is null) return NotFound();
+        if (element.Children.Count == 0 || element.User.Id != user.Id) return Unauthorized();
+
+        var newElt = Tools.LoopToUpdateObject(element, dto, new[] { "id", "image", "children" });
+        if (dto.Image is not null)
+        {
+            string? path = null;
+            try
+            {
+                path = await FileManager.CreateFile(dto.Image, newElt.Symbol ?? "update", _env, new[] { "elements" });
+                FileManager.DeleteFile(element.Image ?? "", _env);
+                newElt.Image = path;
+            }
+            catch (Exception e)
+            {
+                FileManager.DeleteFile(path ?? "", _env);
+                return BadRequest(new Response
+                {
+                    Status = "Error", Errors = new Dictionary<string, string>
+                    {
+                        { "image", e.Message }
+                    }
+                });
+            }
+        }
+
+        if (dto.Atomes is not null)
+        {
+            List<Compose>? atoms;
+
+            try
+            {
+                atoms = JsonConvert.DeserializeObject<List<Compose>>(dto.Atomes);
+            }
+            catch
+            {
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "atoms", "Fomat d'atome non supporte !" }
+                    }
+                });
+            }
+
+            if (atoms is null or { Count: 0 })
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "atoms", "Veillez renseigner des atomes pour la molecule !" }
+                    }
+                });
+
+            try
+            {
+                var children = atoms.Select(atom =>
+                {
+                    var elt = _context.Elements.Find(atom.Id);
+                    if (elt is null)
+                        throw new ExceptionResponse
+                        {
+                            Errors = new Dictionary<string, string>
+                            {
+                                {
+                                    "atoms",
+                                    "L'un ou plusieurs des atomes renseigne inexistant veiller en renseigner des nouveau ou les creer !"
+                                }
+                            }
+                        };
+
+                    return new ElementChildren
+                    {
+                        Quantity = atom.Quantity,
+                        Children = elt,
+                        Position = atom.Position
+                    };
+                }).ToList();
+
+                newElt.Children.Clear();
+                newElt.Children.AddRange(children);
+            }
+            catch (ExceptionResponse e)
+            {
+                return BadRequest(new Response
+                {
+                    Errors = e.Errors
+                });
+            }
+        }
+
+        _context.Update(newElt);
+        await _context.SaveChangesAsync();
+
+        return Ok(newElt);
+    }
+
+    [HttpDelete]
+    [Route("molecule/{id:int}")]
+    public async Task<ActionResult> DeleteMolecule(int id)
+    {
+        var element = await _context
+            .Elements
+            .Include(e => e.Children)
+            .Include(e => e.User)
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _context.Users.FindAsync(int.Parse(userId));
+        if (user is null) return Unauthorized();
+        if (element is null) return NotFound();
+        if (element.Children.Count == 0 || element.User.Id != user.Id) return Unauthorized();
+
+        _context.Remove(element);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 }
