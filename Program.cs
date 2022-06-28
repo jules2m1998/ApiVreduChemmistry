@@ -115,12 +115,7 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddScoped<JwtService>();
-builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<TextureRepository>();
-builder.Services.AddScoped<ElementRepository>();
-builder.Services.AddScoped<ReactionRepository>();
-builder.Services.AddScoped<ProductRepository>();
-builder.Services.AddScoped<ReactantRepository>();
 
 // compression algorithm config
 builder.Services.AddResponseCompression(options =>

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ApiVrEdu.Data;
+using ApiVrEdu.Dto;
 using ApiVrEdu.Dto.Elements;
 using ApiVrEdu.Exceptions;
 using ApiVrEdu.Helpers;
@@ -224,11 +225,11 @@ public class ElementController : ControllerBase
                 }
             });
 
-        List<Atom>? atoms;
+        List<Compose>? atoms;
 
         try
         {
-            atoms = JsonConvert.DeserializeObject<List<Atom>>(dto.Atomes);
+            atoms = JsonConvert.DeserializeObject<List<Compose>>(dto.Atomes);
         }
         catch
         {
@@ -375,11 +376,11 @@ public class ElementController : ControllerBase
 
         if (dto.Atomes is not null)
         {
-            List<Atom>? atoms;
+            List<Compose>? atoms;
 
             try
             {
-                atoms = JsonConvert.DeserializeObject<List<Atom>>(dto.Atomes);
+                atoms = JsonConvert.DeserializeObject<List<Compose>>(dto.Atomes);
             }
             catch
             {
@@ -464,12 +465,5 @@ public class ElementController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
-    }
-
-    private class Atom
-    {
-        public int Id { get; set; }
-        public int Position { get; set; }
-        public int Quantity { get; set; }
     }
 }
