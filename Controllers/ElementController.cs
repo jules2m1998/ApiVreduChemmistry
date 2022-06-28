@@ -256,7 +256,10 @@ public class ElementController : ControllerBase
         {
             var children = atoms.Select(atom =>
             {
-                var elt = _context.Elements.Find(atom.Id);
+                var elt = _context.Elements
+                    .Include(e => e.Children)
+                    .FirstOrDefault(e => e.Id == atom.Id);
+
                 if (elt is null)
                     throw new ExceptionResponse
                     {
@@ -265,6 +268,17 @@ public class ElementController : ControllerBase
                             {
                                 "atoms",
                                 "L'un ou plusieurs des atomes renseigne inexistant veiller en renseigner des nouveau ou les creer !"
+                            }
+                        }
+                    };
+                if (elt.Children.Count > 0)
+                    throw new ExceptionResponse
+                    {
+                        Errors = new Dictionary<string, string>
+                        {
+                            {
+                                "atoms",
+                                "L'un ou plusieurs de vos elemets sont des molecules !"
                             }
                         }
                     };
