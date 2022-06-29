@@ -16,11 +16,11 @@ public static class FileManager
     };
 
     public static async Task<string?> CreateFile(IFormFile image, string name, IWebHostEnvironment env,
-        string[] outFile)
+        string[] outFile, IEnumerable<string>? imgExt = null)
     {
         var fileExtension = Path.GetExtension(image.FileName);
         var removedExt = fileExtension.Replace(".", "");
-        var isContain = ImgExt.Contains(removedExt);
+        var isContain = imgExt?.Contains(removedExt) ?? ImgExt.Contains(removedExt);
 
         if (!isContain)
             throw new Exception(

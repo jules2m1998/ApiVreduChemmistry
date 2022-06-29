@@ -68,7 +68,7 @@ public class TextureController : ControllerBase
             path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "textures" });
             texture.Image = path ?? "";
             _context.Add(texture);
-            var id = await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
             texture = await _context.Textures
                 .AsNoTracking()
                 .Include(t => t.User)
