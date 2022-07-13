@@ -46,8 +46,11 @@ public class AuthController : ControllerBase
             return Unauthorized(new Response
             {
                 Status = "Error",
-                Message =
-                    "Votre compte est desactive veillez demander consulter un administrateur afin qu'il l'active !"
+                Message = "Votre compte est desactive veillez demander a un administrateur afin qu'il l'active !",
+                Errors = new Dictionary<string, string>
+                {
+                    { "0", "Votre compte est desactive veillez demander a un administrateur afin qu'il l'active !" }
+                }
             });
         var userRoles = await _userManager.GetRolesAsync(user);
 
@@ -74,13 +77,13 @@ public class AuthController : ControllerBase
     [Route("register")]
     public async Task<IActionResult> Register(
         [Required(ErrorMessage = "Le nom d'utilisateur est obligatoire !")] [FromForm]
-        string username,
+        string userName,
         [Required(ErrorMessage = "Le mot de passe est obligatoire !")] [FromForm]
         string password,
         [Required(ErrorMessage = "Le nom est obligatoire !")] [FromForm]
-        string lastname,
+        string lastName,
         [Required(ErrorMessage = "Le prenom est obligatoire !")] [FromForm]
-        string firstname,
+        string firstName,
         [Required] [FromForm] [EmailAddress(ErrorMessage = "L'adresse email n'est pas valid")]
         string email,
         [Required] [FromForm] [Phone(ErrorMessage = "Le numero de telephone n'est pas valid")]
@@ -96,10 +99,10 @@ public class AuthController : ControllerBase
         {
             Email = email.ToLower(),
             SecurityStamp = Guid.NewGuid().ToString(),
-            UserName = username.ToLower(),
-            LastName = lastname.ToLower(),
-            FirstName = firstname.ToLower(),
-            BirthDate = birthDate,
+            UserName = userName.ToLower(),
+            LastName = lastName.ToLower(),
+            FirstName = firstName.ToLower(),
+            BirthDate = birthDate.ToUniversalTime(),
             Sex = sex,
             PhoneNumber = phoneNumber,
             CreatedDate = DateTime.UtcNow,
@@ -109,7 +112,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            if (image != null) path = await FileManager.CreateFile(image, username, _env, new[] { "users" });
+            if (image != null) path = await FileManager.CreateFile(image, userName, _env, new[] { "users" });
         }
         catch (Exception e)
         {
@@ -220,6 +223,7 @@ public class AuthController : ControllerBase
 
         if (await _roleManager.RoleExistsAsync(UserRole.Admin))
             await _userManager.AddToRoleAsync(user, UserRole.Admin);
+
         return Ok(new Response { Status = "Success", Message = "User created successfully!" });
     }
 
@@ -234,16 +238,11 @@ public class AuthController : ControllerBase
                 Status = "Error"
             });
         var user = await _context.Users.FirstOrDefaultAsync(user1 => user1.Id == int.Parse(userId));
+        if (user is null) return NotFound(new Response { Message = "Utilisateur inexistant !", Status = "Error" });
 
-        return user switch
-        {
-            null => NotFound(new Response { Message = "Utilisateur inexistant !", Status = "Error" }),
-            { IsActivated: false } => Unauthorized(new Response
-            {
-                Message = "Compte innactif veillez contacter un administrateur !", Status = "Error"
-            }),
-            _ => user
-        };
+        var roles = await _userManager.GetRolesAsync(user);
+
+        return Ok(new { User = user, Roles = roles });
     }
 
 
@@ -289,7 +288,7 @@ public class AuthController : ControllerBase
             if (ex.InnerException is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } npgex)
                 throw new AuthException(StatusCodes.Status400BadRequest, new Dictionary<string, string>
                 {
-                    { "0", ex.Message }
+                    { "0", ex.InnerException?.Message ?? "" }
                 });
             var constraintName = npgex.ConstraintName;
             if (constraintName != null && constraintName.ToLower().Contains("phone"))
