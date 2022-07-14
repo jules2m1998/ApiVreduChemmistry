@@ -56,8 +56,11 @@ public class UserController : ControllerBase
             if (!rP.Succeeded)
                 return BadRequest(new Response
                 {
-                    Message = "Ancien mot de passe incorrect !",
-                    Status = "Error"
+                    Status = "Error",
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "OldPassword", "Ancien mot de passe incorrect !" }
+                    }
                 });
         }
 
