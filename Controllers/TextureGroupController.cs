@@ -28,7 +28,7 @@ public class TextureGroupController : ControllerBase
 
     [HttpPost, Route(""), Authorize(Roles = UserRole.Admin)]
     public async Task<ActionResult<TextureGroup>> Group(
-        [Required(ErrorMessage = "Nom obligatoire !")] [FromBody]
+        [Required(ErrorMessage = "Nom obligatoire !")] [FromQuery]
         string name)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
