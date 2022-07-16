@@ -28,7 +28,8 @@ public class TextureGroupController : ControllerBase
 
     [HttpPost, Route(""), Authorize(Roles = UserRole.Admin)]
     public async Task<ActionResult<TextureGroup>> Group(
-        [Required(ErrorMessage = "Nom obligatoire !")] [FromBody] string name)
+        [Required(ErrorMessage = "Nom obligatoire !")] [FromBody]
+        string name)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _manager.FindByIdAsync(userId);
@@ -72,7 +73,7 @@ public class TextureGroupController : ControllerBase
     }
 
     [HttpPut, Authorize(Roles = UserRole.Admin), Route("{id:int}")]
-    public async Task<ActionResult<TextureGroup>> Update(int id, [FromBody] string name)
+    public async Task<ActionResult<TextureGroup>> Update(int id, string name)
     {
         var group = await _context.TextureGroups.FirstOrDefaultAsync(textureGroup => textureGroup.Id == id);
         if (group is null) return NotFound();
