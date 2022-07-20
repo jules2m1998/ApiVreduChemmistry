@@ -24,7 +24,7 @@ public static class Tools
     public static class Locations
     {
         public static readonly string Element = "elements";
-        public static readonly string Equipment = "equipments";
+        public static readonly string[] Equipment = { "3d", "equipments" };
         public static readonly string Texture = "textures";
         public static readonly string User = "users";
     }

@@ -44,6 +44,7 @@ public class EquipmentController : ControllerBase
         {
             Name = dto.Name,
             Description = dto.Description,
+            IsActivated = dto.IsConstraint,
             User = user
         };
 
@@ -65,7 +66,8 @@ public class EquipmentController : ControllerBase
 
         try
         {
-            path = await FileManager.CreateFile(dto.File, user.UserName, _env, new[] { Tools.Locations.Equipment });
+            path = await FileManager.CreateFile(dto.File, user.UserName, _env, Tools.Locations.Equipment,
+                new[] { "glb" }, false);
             equipment.File = path ?? "";
         }
         catch (Exception e)
@@ -108,7 +110,7 @@ public class EquipmentController : ControllerBase
 
             try
             {
-                path = await FileManager.CreateFile(dto.File, "update2", _env, new[] { Tools.Locations.Equipment });
+                path = await FileManager.CreateFile(dto.File, "update2", _env, Tools.Locations.Equipment);
                 FileManager.DeleteFile(nEq.File ?? "", _env);
                 nEq.File = path ?? "";
             }

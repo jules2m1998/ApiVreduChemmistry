@@ -10,6 +10,7 @@ using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -140,6 +141,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Set up custom content types - associating file extension to MIME type
+var provider = new FileExtensionContentTypeProvider
+{
+    Mappings =
+    {
+        [".glb"] = "model/gltf-buffer"
+    }
+};
+
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
@@ -148,7 +158,9 @@ app.UseStaticFiles(new StaticFileOptions
         ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=2592000");
         ctx.Context.Response.Headers.Append("Expires",
             DateTime.UtcNow.AddDays(30).ToString("R", CultureInfo.InvariantCulture));
-    }
+        ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+    },
+    ContentTypeProvider = provider
 });
 
 app.UseCors(opt => opt

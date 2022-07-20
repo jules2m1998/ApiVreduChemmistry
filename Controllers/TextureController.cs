@@ -97,6 +97,19 @@ public class TextureController : ControllerBase
         var texture = await _context.Textures.Include(t => t.User).AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == dto.Id);
         if (texture is null) return NotFound();
+        if (dto.GroupId is not null)
+        {
+            var group = await _context.TextureGroups.FindAsync(dto.GroupId);
+            if (group is null)
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "GroupId", "Group inexistant !" }
+                    }
+                });
+            texture.Group = group;
+        }
 
         if (dto.Image != null)
         {
@@ -123,7 +136,7 @@ public class TextureController : ControllerBase
             }
         }
 
-        var newTexture = Tools.LoopToUpdateObject(texture, dto, new[] { "id", "image" });
+        var newTexture = Tools.LoopToUpdateObject(texture, dto, new[] { "id", "image", "group" });
         _context.Update(newTexture);
         await _context.SaveChangesAsync();
 

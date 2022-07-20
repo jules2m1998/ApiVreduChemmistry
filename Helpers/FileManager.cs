@@ -8,6 +8,8 @@ public static class FileManager
         "images"
     });
 
+    private static readonly string MyPathOther = Path.Combine("wwwroot");
+
     private static readonly string[] ImgExt =
     {
         "png",
@@ -16,7 +18,7 @@ public static class FileManager
     };
 
     public static async Task<string?> CreateFile(IFormFile image, string name, IWebHostEnvironment env,
-        string[] outFile, IEnumerable<string>? imgExt = null)
+        string[] outFile, IEnumerable<string>? imgExt = null, bool isImg = true)
     {
         var fileExtension = Path.GetExtension(image.FileName);
         var removedExt = fileExtension.Replace(".", "");
@@ -28,11 +30,16 @@ public static class FileManager
 
         var uuidPath = name + "_" + Guid.NewGuid() + fileExtension;
         var fileOut = Path.Combine(outFile);
-        var filePath = Path.Combine(new[]
+        var directory = Path.Combine(new[]
         {
             env.ContentRootPath,
-            MyPath,
-            fileOut,
+            isImg ? MyPath : MyPathOther,
+            fileOut
+        });
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(new[]
+        {
+            directory,
             uuidPath
         });
         await using (Stream fileStream = new FileStream(filePath, FileMode.Create))

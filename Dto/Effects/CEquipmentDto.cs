@@ -10,6 +10,8 @@ public class CEquipmentDto
     [Required(ErrorMessage = "Descriptiom obligatoire !")]
     public string Description { get; set; } = string.Empty;
 
+    public bool IsConstraint { get; set; } = false;
+
     [Required(ErrorMessage = "Fichier obligatoire !")]
     public IFormFile File { get; set; }
 
