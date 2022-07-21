@@ -10,6 +10,8 @@ public class UEquipmentDto
     public string? Name { get; set; } = string.Empty;
     public string? Description { get; set; } = string.Empty;
     public IFormFile? File { get; set; }
+
+    public bool? IsConstraint { get; set; }
     public int? TypeEffectId { get; set; }
     public bool? IsActivated { get; set; }
 }

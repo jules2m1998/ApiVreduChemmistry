@@ -29,11 +29,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Folder Include="Migrations" />
-        <Folder Include="wwwroot\images\elements" />
+        <Folder Include="Migrations"/>
+        <Folder Include="wwwroot\images\elements"/>
         <Folder Include="wwwroot\images\equipments"/>
-        <Folder Include="wwwroot\images\textures" />
-        <Folder Include="wwwroot\images\users" />
+        <Folder Include="wwwroot\images\textures"/>
+        <Folder Include="wwwroot\images\users"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <_ContentIncludedByDefault Remove="wwwroot\images\3d\equipments\admin_4a5fecae-1f47-445b-8f54-a9a1598da12c.glb"/>
+        <_ContentIncludedByDefault Remove="wwwroot\images\3d\equipments\admin_610d2b60-f053-4ae9-a3d2-bd37eba8be89.glb"/>
     </ItemGroup>
 
 </Project>

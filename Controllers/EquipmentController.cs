@@ -103,14 +103,29 @@ public class EquipmentController : ControllerBase
         var eq = await _query.FirstOrDefaultAsync(equipment => dto.Id == equipment.Id);
         if (eq is null) return NotFound();
 
-        var nEq = Tools.LoopToUpdateObject(eq, dto, new[] { "id", "File" });
+        if (dto.TypeEffectId is not null)
+        {
+            var type = await _context.TypeEffects.FindAsync(dto.TypeEffectId);
+            if (type is null)
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "TypeEffectId", "Type d'effet inexistant !" }
+                    }
+                });
+            eq.TypeEffect = type;
+        }
+
+        var nEq = Tools.LoopToUpdateObject(eq, dto, new[] { "id", "File", "TypeEffectId" });
         if (dto.File is not null)
         {
             string? path = null;
 
             try
             {
-                path = await FileManager.CreateFile(dto.File, "update2", _env, Tools.Locations.Equipment);
+                path = await FileManager.CreateFile(dto.File, "update2", _env, Tools.Locations.Equipment,
+                    new[] { "glb" }, false);
                 FileManager.DeleteFile(nEq.File ?? "", _env);
                 nEq.File = path ?? "";
             }

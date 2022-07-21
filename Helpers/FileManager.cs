@@ -49,7 +49,7 @@ public static class FileManager
 
         return Path.Combine(new[]
         {
-            "images",
+            isImg ? "images" : string.Empty,
             fileOut,
             uuidPath
         });
