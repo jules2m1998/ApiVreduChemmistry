@@ -11,4 +11,5 @@ public class TextureUpdateDto
     public IFormFile? Image { get; set; }
     public int? GroupId { get; set; }
     public bool? IsActivated { get; set; }
+    public bool? IsLiquid { get; set; }
 }

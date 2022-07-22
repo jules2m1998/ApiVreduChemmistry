@@ -12,4 +12,6 @@ public class TextureRegisterDto
 
     [Required(ErrorMessage = "Le group de la texture est obligatoire")]
     public int GroupId { get; set; }
+
+    public bool IsLiquid { get; set; } = false;
 }

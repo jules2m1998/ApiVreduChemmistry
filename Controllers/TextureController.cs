@@ -59,7 +59,8 @@ public class TextureController : ControllerBase
         {
             Name = dto.Name,
             Group = group,
-            User = user
+            User = user,
+            IsLiquid = dto.IsLiquid
         };
 
         string? path = null;

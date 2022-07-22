@@ -5,9 +5,10 @@ namespace ApiVrEdu.Models.Textures;
 
 public class Texture : BaseModel, IModelImage
 {
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
     public TextureGroup Group { get; set; }
-    public User User { get; set; }
+    public User User { get; init; }
+    public bool IsLiquid { get; init; }
 
     public List<Element> Elements { get; set; } = new();
     public List<Effect> Effects { get; set; } = new();
