@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 
 namespace ApiVrEdu.Models;
 
@@ -6,9 +7,9 @@ public class BaseModel
 {
     public int Id { get; set; }
 
-    public DateTime CreatedDate { get; set; }
+    [JsonIgnore] public DateTime CreatedDate { get; set; }
 
-    public DateTime UpdatedDate { get; set; }
+    [JsonIgnore] public DateTime UpdatedDate { get; set; }
 
-    [DefaultValue(false)] public bool IsActivated { get; set; }
+    [JsonIgnore] [DefaultValue(false)] public bool IsActivated { get; set; }
 }

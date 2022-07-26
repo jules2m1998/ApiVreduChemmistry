@@ -20,7 +20,6 @@ public class DataContext : IdentityDbContext<User, Role, int>
     }
 
     public DbSet<Texture> Textures { get; set; }
-    public DbSet<TextureGroup> TextureGroups { get; set; }
     public DbSet<Element> Elements { get; set; }
     public DbSet<ElementChildren> ElementChildren { get; set; }
     public DbSet<Reaction> Reactions { get; set; }
@@ -88,10 +87,6 @@ public class DataContext : IdentityDbContext<User, Role, int>
 
         modelBuilder.Entity<User>()
             .HasIndex(b => b.PhoneNumber)
-            .IsUnique();
-
-        modelBuilder.Entity<TextureGroup>()
-            .HasIndex(b => b.Name)
             .IsUnique();
 
         base.OnModelCreating(modelBuilder);

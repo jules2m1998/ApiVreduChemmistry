@@ -34,7 +34,7 @@ public class User : IdentityUser<int>, IModelImage
     public List<ElementGroup> ElementGroups { get; set; }
     public virtual List<Element> Elements { get; set; }
     public virtual List<ElementType> ElementTypes { get; set; }
-    public virtual List<TextureGroup> TextureGroups { get; set; }
+
     public virtual List<Texture> Textures { get; set; }
     public virtual List<Reaction> Reactions { get; set; }
 

@@ -39,33 +39,4 @@ public class TextureRepository
     {
         return _context.Textures.ToList();
     }
-
-    public TextureGroup? GetOneGroup(int id)
-    {
-        return _context.TextureGroups.Find(id);
-    }
-
-    public List<TextureGroup> GetAllGroups()
-    {
-        return _context.TextureGroups.ToList();
-    }
-
-    public TextureGroup? CreateGroup(TextureGroup group)
-    {
-        _context.TextureGroups.Add(group);
-        _context.SaveChanges();
-        return _context.TextureGroups.Find(group.Id);
-    }
-
-    public TextureGroup UpdateGroup(TextureGroup group)
-    {
-        _context.SaveChanges();
-        return group;
-    }
-
-    public void DeleteGroup(TextureGroup group)
-    {
-        _context.TextureGroups.Remove(group);
-        _context.SaveChanges();
-    }
 }

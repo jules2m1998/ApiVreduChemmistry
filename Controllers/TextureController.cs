@@ -2,10 +2,8 @@ using System.Security.Claims;
 using ApiVrEdu.Data;
 using ApiVrEdu.Dto.Textures;
 using ApiVrEdu.Helpers;
-using ApiVrEdu.Models;
 using ApiVrEdu.Models.Textures;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,197 +15,64 @@ namespace ApiVrEdu.Controllers;
 public class TextureController : ControllerBase
 {
     private readonly DataContext _context;
-    private readonly IWebHostEnvironment _env;
-    private readonly UserManager<User> _manager;
 
-    public TextureController(DataContext context, UserManager<User> manager, IWebHostEnvironment env)
+    public TextureController(DataContext context)
     {
         _context = context;
-        _manager = manager;
-        _env = env;
     }
 
     [HttpPost]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<Texture>> Create([FromForm] TextureRegisterDto dto)
+    public async Task<ActionResult<Texture>> Register([FromForm] TextureRegisterDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _manager.FindByIdAsync(userId);
-        if (user is null)
-            return BadRequest(new Response
-            {
-                Status = "Errror",
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "Utilisateur inexistant !" }
-                }
-            });
+        if (!int.TryParse(userId, out var id)) return Unauthorized();
 
-        var group = await _context.TextureGroups.FindAsync(dto.GroupId);
+        var user = await _context.Users.FindAsync(id);
+        if (user is null) return Unauthorized();
+        var texture = await dto.ToTexture(user);
+        var tt = _context.Textures.Add(texture);
+        await _context.SaveChangesAsync();
+        return Created("", tt.Entity);
+    }
 
-        if (group is null)
-            return BadRequest(new Response
-            {
-                Status = "Errror",
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "group de texture inexistant !" }
-                }
-            });
+    [HttpGet]
+    [Route("{id:int}")]
+    public async Task<ActionResult<Texture>> GetOne(int id)
+    {
+        var texture = await _context
+            .Textures
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (texture is null) return NotFound();
 
-        var texture = new Texture
-        {
-            Name = dto.Name,
-            Group = group,
-            User = user,
-            IsLiquid = dto.IsLiquid
-        };
-
-        string? path = null;
-        try
-        {
-            path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "textures" });
-            texture.Image = path ?? "";
-            _context.Add(texture);
-            await _context.SaveChangesAsync();
-            texture = await _context.Textures
-                .AsNoTracking()
-                .Include(t => t.User)
-                .Include(t => t.Group)
-                .FirstOrDefaultAsync(t => t.Id == texture.Id);
-            return Created("", texture);
-        }
-        catch (Exception e)
-        {
-            if (path != null) FileManager.DeleteFile(path, _env);
-            return BadRequest(new Response
-            {
-                Status = "Error",
-                Errors = new Dictionary<string, string>
-                {
-                    { "image", e.Message }
-                }
-            });
-        }
+        return Ok(texture);
     }
 
     [HttpPut]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<Texture>> Update([FromForm] TextureUpdateDto dto)
+    [Route("{id:int}")]
+    public async Task<ActionResult<Texture>> Update(int id, [FromForm] TextureUpdateDto dto)
     {
-        var texture = await _context.Textures.Include(t => t.User).AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == dto.Id);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userId, out var idUser)) return Unauthorized();
+
+        var texture = await _context
+            .Textures
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
         if (texture is null) return NotFound();
-        if (dto.GroupId is not null)
-        {
-            var group = await _context.TextureGroups.FindAsync(dto.GroupId);
-            if (group is null)
-                return BadRequest(new Response
-                {
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "GroupId", "Group inexistant !" }
-                    }
-                });
-            texture.Group = group;
-        }
+        if (texture.User.Id != idUser) return Unauthorized();
 
-        if (dto.Image != null)
-        {
-            string? path = null;
-            try
-            {
-                path = await FileManager.CreateFile(dto.Image, texture.User.UserName, _env, new[] { "textures" });
-                if (path is not null)
-                {
-                    FileManager.DeleteFile(texture.Image, _env);
-                    texture.Image = path;
-                }
-            }
-            catch (Exception e)
-            {
-                FileManager.DeleteFile(path ?? "", _env);
-                return BadRequest(new Response
-                {
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "image", e.Message }
-                    }
-                });
-            }
-        }
 
-        var newTexture = Tools.LoopToUpdateObject(texture, dto, new[] { "id", "image", "group" });
-        _context.Update(newTexture);
+        Tools.LoopToUpdateObject(texture, dto, new[] { "r", "g", "b", "a" });
+        if (dto.A is not null) texture.Color.A = (int)dto.A;
+        if (dto.R is not null) texture.Color.R = (int)dto.R;
+        if (dto.G is not null) texture.Color.G = (int)dto.G;
+        if (dto.B is not null) texture.Color.B = (int)dto.B;
+
+        var txt = _context.Textures.Update(texture);
         await _context.SaveChangesAsync();
 
-        return Ok(texture);
-    }
-
-    [HttpGet]
-    public async Task<ActionResult<List<Texture>>> All()
-    {
-        return Ok(await _context.Textures.AsNoTracking().Include(texture => texture.User)
-            .Include(texture => texture.Group).ToListAsync());
-    }
-
-    [HttpGet]
-    [Route("{id:int}")]
-    public async Task<ActionResult<Texture>> One(int id)
-    {
-        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.Id == id);
-        if (texture == null) return NotFound();
-        return Ok(texture);
-    }
-
-    [HttpDelete]
-    [Route("{id:int}")]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult> Delete(int id)
-    {
-        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.Id == id);
-        if (texture == null) return NotFound();
-        FileManager.DeleteFile(texture.Image, _env);
-        _context.Remove(texture);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
-    }
-
-    [HttpGet]
-    [Route("group/{id:int}")]
-    public ActionResult<List<Texture>> Group(int id)
-    {
-        var textures = _context.Textures
-            .Include(texture => texture.User)
-            .Include(texture => texture.Group)
-            .AsNoTracking()
-            .Where(t => t.Group.Id == id).ToList();
-        return Ok(textures);
-    }
-
-    [HttpGet]
-    [Route("user")]
-    public ActionResult<List<Texture>> ByUser()
-    {
-        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (id is null)
-            return BadRequest(new Response
-            {
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "Veillez verifier que vous etes bien authentifie avant de continuer !!" }
-                },
-                Status = "Error"
-            });
-
-        var textures = _context.Textures
-            .Include(texture => texture.User)
-            .Include(texture => texture.Group)
-            .AsNoTracking()
-            .Where(t => t.User.Id == int.Parse(id)).ToList();
-        return Ok(textures);
+        return Ok(txt.Entity);
     }
 }

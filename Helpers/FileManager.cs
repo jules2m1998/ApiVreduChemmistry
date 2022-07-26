@@ -66,4 +66,21 @@ public static class FileManager
 
         if (File.Exists(filePath)) File.Delete(filePath);
     }
+
+    public static async Task<string> FileToBytes(IFormFile file)
+    {
+        await using var fileStream = new MemoryStream();
+        await file.CopyToAsync(fileStream);
+        var imageBase64Data = Convert.ToBase64String(fileStream.ToArray());
+
+        return $"data:image/{GetExtension(file)};base64,{imageBase64Data}";
+    }
+
+    public static string GetExtension(IFormFile file)
+    {
+        var fileExtension = Path.GetExtension(file.FileName);
+        var removedDotExt = fileExtension.Replace(".", "");
+
+        return removedDotExt;
+    }
 }
