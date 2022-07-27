@@ -12,7 +12,7 @@ public enum TextureType
 
 public class Texture : BaseModel
 {
-    public string Name { get; init; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
     public double DisplacementScale { get; set; } = 1.05;
     public double Roughness { get; set; } = 1;
     public double Metalness { get; set; } = 0;
@@ -25,6 +25,8 @@ public class Texture : BaseModel
     public string? MetalnessMap { get; set; }
 
     public TextureType TextureType { get; set; } = TextureType.Solid;
+    public Texture? Parent { get; set; }
+    public List<Texture>? Children { get; set; }
 
     public User User { get; init; }
     public List<Element> Elements { get; set; } = new();
@@ -36,5 +38,5 @@ public class Color
     public int R { get; set; } = 255;
     public int G { get; set; } = 255;
     public int B { get; set; } = 255;
-    public int A { get; set; } = 1;
+    public float A { get; set; } = 1;
 }
