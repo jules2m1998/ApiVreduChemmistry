@@ -8,7 +8,6 @@ public class Element : BaseModel, IModelImage
 {
     public string Name { get; set; } = string.Empty;
     public string? Symbol { get; set; }
-    public string Color { get; set; } = string.Empty;
     public int? MassNumber { get; set; }
     public int? AtomicNumber { get; set; }
 

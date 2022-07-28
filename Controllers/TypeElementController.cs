@@ -22,8 +22,8 @@ public class TypeElementController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<ElementType>> Register([FromBody] string name)
+    [Authorize(Roles = UserRole.Admin), Route("{name}")]
+    public async Task<ActionResult<ElementType>> Register(string name)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _context.Users.FindAsync(int.Parse(userId));
@@ -34,22 +34,9 @@ public class TypeElementController : ControllerBase
             Name = name,
             User = user
         };
-        _context.Add(type);
-        var id = await _context.SaveChangesAsync();
-        var typeCreated = await _context.ElementTypes.FindAsync(id);
-
-        if (typeCreated == null)
-            return StatusCode(StatusCodes.Status500InternalServerError, new Response
-            {
-                Errors = new Dictionary<string, string>
-                {
-                    {
-                        "0",
-                        "Une erreur s'est produite lors de la creation de l'element veillez verifier vos informations et reessayer plus tard !"
-                    }
-                }
-            });
-        return Created("", typeCreated);
+        var create = _context.ElementTypes.Add(type);
+        await _context.SaveChangesAsync();
+        return Created("", create.Entity);
     }
 
     [HttpPut]

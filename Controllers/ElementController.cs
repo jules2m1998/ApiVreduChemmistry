@@ -47,37 +47,55 @@ public class ElementController : ControllerBase
 
         if (element is null || element.Children.Count > 0) return NotFound();
 
-        var newElt = Tools.LoopToUpdateObject(element, dto, new[] { "id", "image" });
-
-        if (dto.Image is null)
+        if (dto.GroupId is not null)
         {
-            _context.Update(newElt);
-            await _context.SaveChangesAsync();
-            return Ok(newElt);
-        }
-
-        string? path = null;
-        try
-        {
-            path = await FileManager.CreateFile(dto.Image, newElt.Symbol ?? "update", _env, new[] { "elements" });
-            FileManager.DeleteFile(element.Image ?? "", _env);
-            newElt.Image = path;
-        }
-        catch (Exception e)
-        {
-            FileManager.DeleteFile(path ?? "", _env);
-            return BadRequest(new Response
-            {
-                Status = "Error", Errors = new Dictionary<string, string>
+            var group = await _context.ElementGroups.FindAsync(dto.GroupId);
+            if (group is null)
+                return BadRequest(new Response
                 {
-                    { "image", e.Message }
-                }
-            });
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "GroupId", "Groupe d'element introuvable" }
+                    }
+                });
+            element.Group = group;
         }
 
-        _context.Update(newElt);
+        if (dto.TypeId is not null)
+        {
+            var type = await _context.ElementTypes.FindAsync(dto.TypeId);
+            if (type is null)
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "TypeId", "Type d'element introuvable" }
+                    }
+                });
+            element.Type = type;
+        }
+
+        if (dto.TextureId is not null)
+        {
+            var texture = await _context.Textures.FindAsync(dto.TextureId);
+            if (texture is null)
+                return BadRequest(new Response
+                {
+                    Errors = new Dictionary<string, string>
+                    {
+                        { "TextureId", "Texture introuvable" }
+                    }
+                });
+            element.Texture = texture;
+        }
+
+        var res = await dto.UpdateElement(element, _env);
+        if (res is not null) return BadRequest(res);
+
+        var r = _context.Elements.Update(element);
         await _context.SaveChangesAsync();
-        return Ok(newElt);
+
+        return Ok(r.Entity);
     }
 
     [HttpPost]
@@ -131,7 +149,6 @@ public class ElementController : ControllerBase
         {
             Name = dto.Name,
             Symbol = dto.Symbol,
-            Color = dto.Color,
             MassNumber = dto.MassNumber,
             AtomicNumber = dto.AtomicNumber,
             User = user,
@@ -295,7 +312,6 @@ public class ElementController : ControllerBase
             element = new Element
             {
                 Name = dto.Name,
-                Color = dto.Color,
                 Texture = texture,
                 User = user,
                 Children = children
