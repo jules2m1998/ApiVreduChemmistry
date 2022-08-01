@@ -12,6 +12,9 @@ public class RegisterMoleculeDto
     [Required(ErrorMessage = "Texture obligatoire !")]
     public int TextureId { get; set; }
 
+    [Required(ErrorMessage = "Description obligatoire !")]
+    public string Description { get; set; } = string.Empty;
+
     [Required(ErrorMessage = "Atomes de la molecule obligatoire !")]
     public string Atomes { get; set; }
 }

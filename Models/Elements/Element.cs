@@ -21,8 +21,10 @@ public class Element : BaseModel, IModelImage
 
     public List<Product> Products { get; set; }
 
+    public string Description { get; set; } = string.Empty;
+
     [InverseProperty("Parent")] public List<ElementChildren> Children { get; set; }
 
-    [InverseProperty("Children")] public List<ElementChildren> Parents { get; set; }
-    public string? Image { get; set; } = string.Empty;
+    [InverseProperty("Children")] public List<ElementChildren>? Parents { get; set; }
+    public string Image { get; set; } = string.Empty;
 }

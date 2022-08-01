@@ -10,6 +10,9 @@ public class RegisterElementDto
     [Required(ErrorMessage = "Symbol obligatoire !")]
     public string Symbol { get; set; } = string.Empty;
 
+    [Required(ErrorMessage = "Description obligatoire !")]
+    public string Description { get; set; } = string.Empty;
+
     public IFormFile? Image { get; set; }
 
     [Required(ErrorMessage = "Nombre de masse obligatoire !")]

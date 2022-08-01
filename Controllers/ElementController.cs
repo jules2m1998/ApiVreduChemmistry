@@ -154,7 +154,8 @@ public class ElementController : ControllerBase
             User = user,
             Group = group,
             Type = type,
-            Texture = texture
+            Texture = texture,
+            Description = dto.Description
         };
         if (dto.Image is not null)
         {
@@ -162,7 +163,7 @@ public class ElementController : ControllerBase
             try
             {
                 path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "elements" });
-                element.Image = path;
+                element.Image = path ?? string.Empty;
             }
             catch (Exception e)
             {
@@ -206,6 +207,14 @@ public class ElementController : ControllerBase
         var one = await _elements.AsNoTracking().FirstOrDefaultAsync(element => element.Id == id);
         if (one is null) return NotFound();
         return Ok(one);
+    }
+
+    [HttpGet]
+    [Route("atom")]
+    public ActionResult<List<Element>> GetAtoms()
+    {
+        return Ok(_context.Elements.Include(element => element.Children).Where(element => element.Children.Count == 0)
+            .ToList());
     }
 
     [HttpDelete]
@@ -289,7 +298,7 @@ public class ElementController : ControllerBase
                             }
                         }
                     };
-                if (elt.Children.Count > 0)
+                if (elt.Children is { Count: > 0 })
                     throw new ExceptionResponse
                     {
                         Errors = new Dictionary<string, string>
@@ -314,7 +323,8 @@ public class ElementController : ControllerBase
                 Name = dto.Name,
                 Texture = texture,
                 User = user,
-                Children = children
+                Children = children,
+                Description = dto.Description
             };
         }
         catch (ExceptionResponse e)
@@ -331,7 +341,7 @@ public class ElementController : ControllerBase
             try
             {
                 path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "elements" });
-                element.Image = path;
+                if (path is not null) element.Image = path;
             }
             catch (Exception e)
             {
@@ -375,7 +385,7 @@ public class ElementController : ControllerBase
             {
                 path = await FileManager.CreateFile(dto.Image, newElt.Symbol ?? "update", _env, new[] { "elements" });
                 FileManager.DeleteFile(element.Image ?? "", _env);
-                newElt.Image = path;
+                if (path is not null) newElt.Image = path;
             }
             catch (Exception e)
             {

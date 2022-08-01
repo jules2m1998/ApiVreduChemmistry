@@ -27,6 +27,8 @@ public class UpdateElementDto
 
     public bool? IsActivated { get; set; }
 
+    public string? Description { get; set; } = string.Empty;
+
     public async Task<Response?> UpdateElement(Element element, IWebHostEnvironment env)
     {
         if (Image is not null)
