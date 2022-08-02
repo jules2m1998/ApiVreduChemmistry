@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace ApiVrEdu.Models;
@@ -11,5 +10,5 @@ public class BaseModel
 
     [JsonIgnore] public DateTime UpdatedDate { get; set; }
 
-    [JsonIgnore] [DefaultValue(false)] public bool IsActivated { get; set; }
+    public bool IsActivated { get; set; }
 }

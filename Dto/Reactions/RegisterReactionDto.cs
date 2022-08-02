@@ -14,6 +14,8 @@ public class RegisterReactionDto
 
     [Required(ErrorMessage = "Reactifs obligatoires !")]
     public List<ComposeReaction> ReactantIds { get; set; } = new();
+
+    public bool IsActivated { get; set; } = false;
 }
 
 public class ComposeReaction
