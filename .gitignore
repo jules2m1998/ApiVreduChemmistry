@@ -8,4 +8,6 @@ riderModule.iml
 wwwroot/images/users/*
 wwwroot/images/textures/*
 wwwroot/images/elements/*
+wwwroot/images/equipments/*
+wwwroot/*
 Migrations/*

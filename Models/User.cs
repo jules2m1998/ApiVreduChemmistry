@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ApiVrEdu.Models.Effects;
 using ApiVrEdu.Models.Elements;
 using ApiVrEdu.Models.Reactions;
 using ApiVrEdu.Models.Textures;
@@ -33,8 +34,11 @@ public class User : IdentityUser<int>, IModelImage
     public List<ElementGroup> ElementGroups { get; set; }
     public virtual List<Element> Elements { get; set; }
     public virtual List<ElementType> ElementTypes { get; set; }
-    public virtual List<TextureGroup> TextureGroups { get; set; }
+
     public virtual List<Texture> Textures { get; set; }
     public virtual List<Reaction> Reactions { get; set; }
+
+    public virtual List<TypeEffect> TypeEffects { get; set; }
+    public virtual List<Equipment> Equipments { get; set; }
     public string? Image { get; set; } = string.Empty;
 }

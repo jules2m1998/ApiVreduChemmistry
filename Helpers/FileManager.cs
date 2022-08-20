@@ -8,6 +8,8 @@ public static class FileManager
         "images"
     });
 
+    private static readonly string MyPathOther = Path.Combine("wwwroot");
+
     private static readonly string[] ImgExt =
     {
         "png",
@@ -16,11 +18,11 @@ public static class FileManager
     };
 
     public static async Task<string?> CreateFile(IFormFile image, string name, IWebHostEnvironment env,
-        string[] outFile)
+        string[] outFile, IEnumerable<string>? imgExt = null, bool isImg = true)
     {
         var fileExtension = Path.GetExtension(image.FileName);
         var removedExt = fileExtension.Replace(".", "");
-        var isContain = ImgExt.Contains(removedExt);
+        var isContain = imgExt?.Contains(removedExt) ?? ImgExt.Contains(removedExt);
 
         if (!isContain)
             throw new Exception(
@@ -28,11 +30,16 @@ public static class FileManager
 
         var uuidPath = name + "_" + Guid.NewGuid() + fileExtension;
         var fileOut = Path.Combine(outFile);
-        var filePath = Path.Combine(new[]
+        var directory = Path.Combine(new[]
         {
             env.ContentRootPath,
-            MyPath,
-            fileOut,
+            isImg ? MyPath : MyPathOther,
+            fileOut
+        });
+        Directory.CreateDirectory(directory);
+        var filePath = Path.Combine(new[]
+        {
+            directory,
             uuidPath
         });
         await using (Stream fileStream = new FileStream(filePath, FileMode.Create))
@@ -42,7 +49,7 @@ public static class FileManager
 
         return Path.Combine(new[]
         {
-            "images",
+            isImg ? "images" : string.Empty,
             fileOut,
             uuidPath
         });
@@ -58,5 +65,22 @@ public static class FileManager
         });
 
         if (File.Exists(filePath)) File.Delete(filePath);
+    }
+
+    public static async Task<string> FileToBytes(IFormFile file)
+    {
+        await using var fileStream = new MemoryStream();
+        await file.CopyToAsync(fileStream);
+        var imageBase64Data = Convert.ToBase64String(fileStream.ToArray());
+
+        return $"data:image/{GetExtension(file)};base64,{imageBase64Data}";
+    }
+
+    public static string GetExtension(IFormFile file)
+    {
+        var fileExtension = Path.GetExtension(file.FileName);
+        var removedDotExt = fileExtension.Replace(".", "");
+
+        return removedDotExt;
     }
 }

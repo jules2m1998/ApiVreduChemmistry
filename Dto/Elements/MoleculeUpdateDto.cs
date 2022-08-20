@@ -16,4 +16,5 @@ public class MoleculeUpdateDto
     public int? TextureId { get; set; }
 
     public string? Atomes { get; set; }
+    public string? Description { get; set; } = string.Empty;
 }

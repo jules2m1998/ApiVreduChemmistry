@@ -21,9 +21,9 @@ public class GroupElementController : ControllerBase
         _context = context;
     }
 
-    [HttpPost]
+    [HttpPost, Route("{name}")]
     [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<ElementGroup>> Register([FromBody] string name)
+    public async Task<ActionResult<ElementGroup>> Register(string name)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var user = await _context.Users.FindAsync(int.Parse(userId));
@@ -34,22 +34,10 @@ public class GroupElementController : ControllerBase
             Name = name,
             User = user
         };
-        _context.Add(type);
-        var id = await _context.SaveChangesAsync();
-        var typeCreated = await _context.ElementGroups.FindAsync(id);
+        var elt = _context.ElementGroups.Add(type);
+        await _context.SaveChangesAsync();
 
-        if (typeCreated == null)
-            return StatusCode(StatusCodes.Status500InternalServerError, new Response
-            {
-                Errors = new Dictionary<string, string>
-                {
-                    {
-                        "0",
-                        "Une erreur s'est produite lors de la creation de l'element veillez verifier vos informations et reessayer plus tard !"
-                    }
-                }
-            });
-        return Created("", typeCreated);
+        return Created("", elt.Entity);
     }
 
 

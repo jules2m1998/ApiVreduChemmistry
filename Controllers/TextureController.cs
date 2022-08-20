@@ -18,182 +18,106 @@ public class TextureController : ControllerBase
 {
     private readonly DataContext _context;
     private readonly IWebHostEnvironment _env;
-    private readonly UserManager<User> _manager;
+    private readonly UserManager<User> _userManager;
 
-    public TextureController(DataContext context, UserManager<User> manager, IWebHostEnvironment env)
+    public TextureController(DataContext context, IWebHostEnvironment env, UserManager<User> userManager)
     {
         _context = context;
-        _manager = manager;
         _env = env;
+        _userManager = userManager;
     }
 
     [HttpPost]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<Texture>> Create([FromForm] TextureRegisterDto dto)
+    public async Task<ActionResult<Texture>> Register([FromForm] TextureRegisterDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _manager.FindByIdAsync(userId);
-        if (user is null)
-            return BadRequest(new Response
-            {
-                Status = "Errror",
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "Utilisateur inexistant !" }
-                }
-            });
+        if (!int.TryParse(userId, out var id)) return Unauthorized();
 
-        var group = await _context.TextureGroups.FindAsync(dto.GroupId);
+        var user = await _context.Users.FindAsync(id);
+        if (user is null) return Unauthorized();
 
-        if (group is null)
-            return BadRequest(new Response
-            {
-                Status = "Errror",
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "group de texture inexistant !" }
-                }
-            });
+        Texture? parent = null;
 
-        var texture = new Texture
-        {
-            Name = dto.Name,
-            Group = group,
-            User = user
-        };
-
-        string? path = null;
-        try
-        {
-            path = await FileManager.CreateFile(dto.Image, user.UserName, _env, new[] { "textures" });
-            texture.Image = path ?? "";
-            _context.Add(texture);
-            var id = await _context.SaveChangesAsync();
-            texture = await _context.Textures
-                .AsNoTracking()
-                .Include(t => t.User)
-                .Include(t => t.Group)
-                .FirstOrDefaultAsync(t => t.Id == texture.Id);
-            return Created("", texture);
-        }
-        catch (Exception e)
-        {
-            if (path != null) FileManager.DeleteFile(path, _env);
-            return BadRequest(new Response
-            {
-                Status = "Error",
-                Errors = new Dictionary<string, string>
-                {
-                    { "image", e.Message }
-                }
-            });
-        }
-    }
-
-    [HttpPut]
-    [Authorize(Roles = UserRole.Admin)]
-    public async Task<ActionResult<Texture>> Update([FromForm] TextureUpdateDto dto)
-    {
-        var texture = await _context.Textures.Include(t => t.User).AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == dto.Id);
-        if (texture is null) return NotFound();
-
-        if (dto.Image != null)
-        {
-            string? path = null;
-            try
-            {
-                path = await FileManager.CreateFile(dto.Image, texture.User.UserName, _env, new[] { "textures" });
-                if (path is not null)
-                {
-                    FileManager.DeleteFile(texture.Image, _env);
-                    texture.Image = path;
-                }
-            }
-            catch (Exception e)
-            {
-                FileManager.DeleteFile(path ?? "", _env);
-                return BadRequest(new Response
-                {
-                    Errors = new Dictionary<string, string>
-                    {
-                        { "image", e.Message }
-                    }
-                });
-            }
-        }
-
-        var newTexture = Tools.LoopToUpdateObject(texture, dto, new[] { "id", "image" });
-        _context.Update(newTexture);
+        if (dto.ParentId is not null) parent = await _context.Textures.FindAsync(dto.ParentId);
+        var texture = await dto.ToTexture(user, parent, _env);
+        var tt = _context.Textures.Add(texture);
         await _context.SaveChangesAsync();
-
-        return Ok(texture);
-    }
-
-    [HttpGet]
-    public async Task<ActionResult<List<Texture>>> All()
-    {
-        return Ok(await _context.Textures.AsNoTracking().Include(texture => texture.User)
-            .Include(texture => texture.Group).ToListAsync());
+        return Created("", tt.Entity);
     }
 
     [HttpGet]
     [Route("{id:int}")]
-    public async Task<ActionResult<Texture>> One(int id)
+    public async Task<ActionResult<Texture>> GetOne(int id)
     {
-        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
+        var texture = await _context
+            .Textures
+            .Include(t => t.User)
+            .Include(t => t.Parent)
             .FirstOrDefaultAsync(t => t.Id == id);
-        if (texture == null) return NotFound();
+        if (texture is null) return NotFound();
+
         return Ok(texture);
+    }
+
+    [HttpPut]
+    [Route("{id:int}")]
+    public async Task<ActionResult<Texture>> Update(int id, [FromForm] TextureUpdateDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userId, out var idUser)) return Unauthorized();
+
+        var texture = await _context
+            .Textures
+            .Include(t => t.User)
+            .Include(t => t.Parent)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (texture is null) return NotFound();
+        if (texture.User.Id != idUser) return Unauthorized();
+
+
+        await dto.ToTexture(texture, _env);
+        var txt = _context.Textures.Update(texture);
+        await _context.SaveChangesAsync();
+
+        return Ok(txt.Entity);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<List<Texture>>> GetAll()
+    {
+        var textures = await _context
+            .Textures
+            .AsNoTracking()
+            .Include(texture => texture.User)
+            .Include(texture => texture.Parent)
+            .ToListAsync();
+
+        return Ok(textures);
     }
 
     [HttpDelete]
     [Route("{id:int}")]
-    [Authorize(Roles = UserRole.Admin)]
     public async Task<ActionResult> Delete(int id)
     {
-        var texture = await _context.Textures.AsNoTracking().Include(t => t.Group).Include(t => t.User)
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userId, out var idUser)) return Unauthorized();
+        var texture = await _context
+            .Textures
+            .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.Id == id);
-        if (texture == null) return NotFound();
-        FileManager.DeleteFile(texture.Image, _env);
-        _context.Remove(texture);
+
+        if (texture is null) return NotFound();
+        var user = await _userManager.FindByIdAsync(idUser.ToString());
+        if (user is null) return Unauthorized();
+
+        if (texture.User.Id != idUser && !await _userManager.IsInRoleAsync(user, UserRole.Admin)) return Unauthorized();
+
+        _context.Textures.Remove(texture);
+        Tools.LoopToDeleteFiles(texture, _env);
+
         await _context.SaveChangesAsync();
 
         return NoContent();
-    }
-
-    [HttpGet]
-    [Route("group/{id:int}")]
-    public ActionResult<List<Texture>> Group(int id)
-    {
-        var textures = _context.Textures
-            .Include(texture => texture.User)
-            .Include(texture => texture.Group)
-            .AsNoTracking()
-            .Where(t => t.Group.Id == id).ToList();
-        return Ok(textures);
-    }
-
-    [HttpGet]
-    [Route("user")]
-    public ActionResult<List<Texture>> ByUser()
-    {
-        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (id is null)
-            return BadRequest(new Response
-            {
-                Errors = new Dictionary<string, string>
-                {
-                    { "0", "Veillez verifier que vous etes bien authentifie avant de continuer !!" }
-                },
-                Status = "Error"
-            });
-
-        var textures = _context.Textures
-            .Include(texture => texture.User)
-            .Include(texture => texture.Group)
-            .AsNoTracking()
-            .Where(t => t.User.Id == int.Parse(id)).ToList();
-        return Ok(textures);
     }
 }

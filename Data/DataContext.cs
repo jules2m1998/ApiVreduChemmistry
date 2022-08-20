@@ -1,5 +1,6 @@
 using ApiVrEdu.Helpers;
 using ApiVrEdu.Models;
+using ApiVrEdu.Models.Effects;
 using ApiVrEdu.Models.Elements;
 using ApiVrEdu.Models.Reactions;
 using ApiVrEdu.Models.Textures;
@@ -19,7 +20,6 @@ public class DataContext : IdentityDbContext<User, Role, int>
     }
 
     public DbSet<Texture> Textures { get; set; }
-    public DbSet<TextureGroup> TextureGroups { get; set; }
     public DbSet<Element> Elements { get; set; }
     public DbSet<ElementChildren> ElementChildren { get; set; }
     public DbSet<Reaction> Reactions { get; set; }
@@ -27,6 +27,9 @@ public class DataContext : IdentityDbContext<User, Role, int>
     public DbSet<ElementType> ElementTypes { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<Reactant> Reactants { get; set; }
+    public DbSet<TypeEffect> TypeEffects { get; set; }
+    public DbSet<Effect> Effects { get; set; }
+    public DbSet<Equipment> Equipments { get; set; }
 
     public override EntityEntry<TEntity> Remove<TEntity>(TEntity entity)
     {
@@ -84,10 +87,6 @@ public class DataContext : IdentityDbContext<User, Role, int>
 
         modelBuilder.Entity<User>()
             .HasIndex(b => b.PhoneNumber)
-            .IsUnique();
-
-        modelBuilder.Entity<TextureGroup>()
-            .HasIndex(b => b.Name)
             .IsUnique();
 
         base.OnModelCreating(modelBuilder);

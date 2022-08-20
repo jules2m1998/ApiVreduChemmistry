@@ -28,8 +28,12 @@ public class ReactionController : ControllerBase
             .Include(reaction => reaction.User)
             .Include(reaction => reaction.Products)
             .ThenInclude(product => product.Element)
+            .ThenInclude(element => element.Children)
+            .ThenInclude(children => children.Children)
             .Include(reaction => reaction.Reactants)
-            .ThenInclude(reactant => reactant.Element);
+            .ThenInclude(reactant => reactant.Element)
+            .ThenInclude(element => element.Children)
+            .ThenInclude(children => children.Children);
     }
 
     [HttpPost]
@@ -99,7 +103,8 @@ public class ReactionController : ControllerBase
                 Name = dto.Name,
                 Products = products,
                 Reactants = reactants,
-                User = user
+                User = user,
+                IsActivated = dto.IsActivated
             };
             _context.Add(reaction);
             await _context.SaveChangesAsync();
@@ -249,6 +254,19 @@ public class ReactionController : ControllerBase
         if (reaction is null) return NotFound();
 
         return Ok(reaction);
+    }
+
+    [HttpGet]
+    [Authorize]
+    [Route("current")]
+    public ActionResult<List<Reaction>> GetByUser()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userId, out var id)) return Unauthorized();
+
+        var reactions = _queryable.Where(reaction => reaction.User.Id == id).ToList();
+
+        return Ok(reactions);
     }
 
     [HttpDelete]
