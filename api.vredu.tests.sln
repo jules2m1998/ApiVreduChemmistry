@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30114.105
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiVrEdu", "ApiVrEdu\ApiVrEdu.csproj", "{373F49EA-7D32-4DD7-884A-A9D2128B20E2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiVrEdu.Tests", "ApiVrEdu.Tests\ApiVrEdu.Tests.csproj", "{E648A10B-701C-4196-AF20-BDB1997E7DE5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{373F49EA-7D32-4DD7-884A-A9D2128B20E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{373F49EA-7D32-4DD7-884A-A9D2128B20E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{373F49EA-7D32-4DD7-884A-A9D2128B20E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{373F49EA-7D32-4DD7-884A-A9D2128B20E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E648A10B-701C-4196-AF20-BDB1997E7DE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E648A10B-701C-4196-AF20-BDB1997E7DE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E648A10B-701C-4196-AF20-BDB1997E7DE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E648A10B-701C-4196-AF20-BDB1997E7DE5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
